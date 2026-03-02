@@ -1,0 +1,60 @@
+RewriteEngine On
+
+# -----------------------------
+# Security
+# -----------------------------
+Options -Indexes
+
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "(config\.php|schema\.sql|seed\.sql)">
+    Require all denied
+</FilesMatch>
+
+# -----------------------------
+# Upload size
+# -----------------------------
+php_value upload_max_filesize 10M
+php_value post_max_size 10M
+
+# -----------------------------
+# ถ้ามีไฟล์จริง ไม่ต้อง rewrite
+# -----------------------------
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# -----------------------------
+# Route Pages (สวย ๆ ไม่มี .php)
+# -----------------------------
+RewriteRule ^login$ pages/login.php [L]
+RewriteRule ^register$ pages/register.php [L]
+RewriteRule ^booking$ pages/booking.php [L]
+RewriteRule ^courts$ pages/courts.php [L]
+RewriteRule ^guidebook$ pages/guidebook.php [L]
+RewriteRule ^membership_payment$ pages/membership_payment.php [L]
+RewriteRule ^membership$ pages/membership.php [L]
+RewriteRule ^pay_booking$ pages/pay_booking.php [L]
+RewriteRule ^profile$ pages/profile.php [L]
+RewriteRule ^reports$ pages/reports.php [L]
+RewriteRule ^reservations$ pages/reservations.php [L]
+RewriteRule ^payment_success$ pages/payment_success.php [L]
+
+# -----------------------------
+# ตัด .php ออกอัตโนมัติ
+# -----------------------------
+RewriteCond %{REQUEST_FILENAME}.php -f
+RewriteRule ^([^\.]+)$ $1.php [L]
+
+# -----------------------------
+# Fallback -> index
+# -----------------------------
+RewriteRule ^$ index.php [L]
+
+# -----------------------------
+# Error Page
+# -----------------------------
+ErrorDocument 404 /index.php
+ErrorDocument 403 /index.php
