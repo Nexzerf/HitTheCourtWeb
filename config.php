@@ -1,4 +1,9 @@
 <?php
+
+// ============================================
+// TIMEZONE - ต้องอยู่บนสุดก่อนทุกอย่าง
+// ============================================
+date_default_timezone_set('Asia/Bangkok');
 /**
  * HIT THE COURT - Main Configuration File
  * 
@@ -43,6 +48,7 @@ define('UPLOAD_PATH', __DIR__ . '/uploads/');
 // THUNDER API
 // กุญแจสำคัญสำหรับเรียกใช้งานบริการภายนอก (API) ที่ชื่อว่า Thunder
 define('THUNDER_API_KEY', 'dab3a4df-3ef5-497c-aad7-753343644c2d');
+
 
 // ============================================
 // SESSION CONFIGURATION
@@ -213,6 +219,7 @@ function formatPrice($price) {
 function formatDate($date) {
     return date('d M Y', strtotime($date));
 }
+
 
 
 ?>
