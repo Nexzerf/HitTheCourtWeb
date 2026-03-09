@@ -88,37 +88,7 @@ try {
     die("Connection failed. Please try again later.");
 }
 
-// ============================================
-// SECURITY HELPER FUNCTIONS
-// ============================================
 
-/**
- * Generate a CSRF Token and store it in the session.
- * ตัวนี้คือการสร้าง "กุญแจลับ" (Token) ไว้ป้องกันการโจมตีแบบ CSRF
- * คือการป้องกันไม่ให้คนอื่นมาปลอมแปลงฟอร์มส่งข้อมูลเข้ามา
- * @return string
- */
-function generateCSRFToken() {
-    // ถ้ายังไม่มี Token ในระบบ ให้สุ่มสร้างขึ้นมาใหม่ซะ (แบบสุ่มยากมาก)
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    return $_SESSION['csrf_token'];
-}
-
-/**
- * Verify a CSRF Token against the session token.
- * อันนี้คือการตรวจสอบว่า "กุญแจลับ" ที่ส่งมาจากฟอร์ม ตรงกับที่เราเก็บไว้ใน Session ไหม
- * @param string $token
- * @return bool
- */
-function verifyCSRFToken($token) {
-    // ใช้ hash_equals เพื่อป้องกันการโจมตีแบบ Timing Attack (การเดากุญแจผิดๆ ถูกๆ)
-    if (isset($_SESSION['csrf_token']) && hash_equals($_SESSION['csrf_token'], $token)) {
-        return true;
-    }
-    return false;
-}
 
 // ============================================
 // GENERAL HELPER FUNCTIONS
