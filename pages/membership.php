@@ -206,7 +206,6 @@ Logout
                                 <div class="feature-icon">✓</div>
                                 <span><strong>Free Equipment</strong> (<?= $plan['free_equipment_limit'] ?> items/month)</span>
                             </li>
-\
                         </ul>
 
                         <!-- ปุ่มกดซื้อ -->
