@@ -164,7 +164,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 2. อัปเดตสถานะการจองเป็น 'paid'
         $pdo->prepare("UPDATE bookings SET payment_status = 'paid', expires_at = NULL WHERE booking_id = ?")->execute([$bookingId]);
         // 3. เพิ่มแต้มให้ User และนับจำนวนการจอง
-        $pdo->prepare("UPDATE users SET points = points + 10, total_bookings = total_bookings + 1 WHERE user_id = ?")->execute([$booking['user_id']]);
+        $pdo->prepare("UPDATE users SET points = points + 1, total_bookings = total_bookings + 1 WHERE user_id = ?")->execute([$booking['user_id']]);
         $pdo->commit();
 
         // ส่งไปหน้าสำเร็จ

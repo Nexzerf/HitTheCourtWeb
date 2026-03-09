@@ -27,12 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // ถ้ามีการกรอกรหัสผ่านใหม่เข้ามา
     if (!empty($newPassword)) {
-        // เช็คว่ารหัสผ่านสั้นไปไหม (ต้องมากกว่า 6 ตัว)
-        if (strlen($newPassword) < 6) {
-            $errors['password'] = 'Password must be at least 6 characters';
-        } elseif ($newPassword !== $confirmPassword) {
-            // เช็คว่ารหัสผ่านใหม่ กับ ช่องยืนยันรหัสผ่าน ตรงกันไหม
-            $errors['password'] = 'Passwords do not match';
+        // เช็คว่ารหัสผ่านสั้นไปไหม (ต้องมากกว่าหรือเท่ากับ 8 ตัว)
+        if (strlen($newPassword) <= 8) {
+            $errors['new_password'] = 'Password must be at least 8 characters';
+        }
+        // เช็คว่ารหัสผ่านใหม่ กับ ช่องยืนยันรหัสผ่าน ตรงกันไหม (เช็คแยกอิสระ)
+        if ($newPassword !== $confirmPassword) {
+            $errors['confirm_password'] = 'Passwords do not match';
         }
     }
 
@@ -235,15 +236,21 @@ Logout
                             <!-- ช่องรหัสผ่านใหม่ (ถ้าไม่กรอกคือไม่เปลี่ยน) -->
                             <div class="form-group-profile">
                                 <label class="form-label">New Password</label>
-                                <input type="password" name="new_password" class="form-input-profile" placeholder="Leave blank to keep current">
+                                <input type="password" name="new_password"
+                                    class="form-input-profile <?= isset($errors['new_password']) ? 'input-error' : '' ?>"
+                                    placeholder="Leave blank to keep current">
+                                <?php if (isset($errors['new_password'])): ?>
+                                    <small style="color: #FF4A4A;"><?= $errors['new_password'] ?></small>
+                                <?php endif; ?>
                             </div>
                             <!-- ช่องยืนยันรหัสผ่านใหม่ -->
                             <div class="form-group-profile">
                                 <label class="form-label">Confirm New Password</label>
-                                <input type="password" name="confirm_password" class="form-input-profile" placeholder="Confirm new password">
-                                <!-- ถ้ามี Error เรื่องรหัสผ่าน จะแสดงตรงนี้ -->
-                                <?php if (isset($errors['password'])): ?>
-                                    <small style="color: var(--error);"><?= $errors['password'] ?></small>
+                                <input type="password" name="confirm_password"
+                                    class="form-input-profile <?= isset($errors['confirm_password']) ? 'input-error' : '' ?>"
+                                    placeholder="Confirm new password">
+                                <?php if (isset($errors['confirm_password'])): ?>
+                                    <small style="color: #FF4A4A;"><?= $errors['confirm_password'] ?></small>
                                 <?php endif; ?>
                             </div>
                             <!-- ปุ่มบันทึก -->

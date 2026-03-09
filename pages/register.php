@@ -17,7 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($username)) $errors['username'] = 'Username is required';
     if (empty($email))    $errors['email']    = 'Email is required';
     if (empty($phone))    $errors['phone']    = 'Phone number is required';
-    if (empty($password)) $errors['password'] = 'Password is required';
+    if (empty($password))            $errors['password'] = 'Password is required';
+    elseif (strlen($password) < 8)  $errors['password'] = 'Password must be at least 8 characters';
 
     if (empty($errors)) {
         $check = $pdo->prepare("SELECT user_id FROM users WHERE username = ? OR email = ?");
@@ -75,7 +76,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <?php if ($success): ?>
                 <div class="alert-success">
                     <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><polyline points="20 6 9 17 4 12"/></svg>
-                    <?= htmlspecialchars($success) ?> <a href="login.php">Login here →</a>
+                    <?= htmlspecialchars($success) ?> <a href="login">Login here →</a>
                 </div>
             <?php endif; ?>
 
@@ -101,7 +102,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <svg class="input-icon" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                         <input type="password" id="password" name="password"
                                class="form-input <?= isset($errors['password']) ? 'error' : '' ?>"
-                               placeholder="Create a password">
+                               placeholder="At least 8 characters"
+                               minlength="8">
                     </div>
                     <?php if (isset($errors['password'])): ?>
                         <span class="form-error"><?= htmlspecialchars($errors['password']) ?></span>
