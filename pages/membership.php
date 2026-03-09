@@ -206,10 +206,7 @@ Logout
                                 <div class="feature-icon">✓</div>
                                 <span><strong>Free Equipment</strong> (<?= $plan['free_equipment_limit'] ?> items/month)</span>
                             </li>
-                             <li>
-                                <div class="feature-icon">✓</div>
-                                <span><strong>Point Rewards</strong> System</span>
-                            </li>
+\
                         </ul>
 
                         <!-- ปุ่มกดซื้อ -->
@@ -248,12 +245,6 @@ Logout
                             <td>Advance Booking</td>
                             <td style="text-align: center;">2 Days</td>
                             <td style="text-align: center;" class="highlight-text">7 Days</td>
-                        </tr>
-                        <!-- เปรียบเทียบจำนวนสล็อตที่จองได้ -->
-                        <tr>
-                            <td>Slots per Booking</td>
-                            <td style="text-align: center;">1 Slot</td>
-                            <td style="text-align: center;" class="highlight-text">Unlimited</td>
                         </tr>
                         <!-- เปรียบเทียบส่วนลด -->
                         <tr>
