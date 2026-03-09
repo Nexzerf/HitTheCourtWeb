@@ -16,10 +16,6 @@ requireLogin();
  // เตรียมตัวแปรไว้เก็บ Error ต่างๆ
  $errors = [];
 
- // ถ้า URL มีคำว่า ?success ต่อท้ายมา (แสดงว่าเพิ่งจ่ายเงินเสร็จ) ก็ให้ขึ้นข้อความดีใจให้ User
- if (isset($_GET['success'])) {
-    $success_msg = "Payment successful! Your membership is now active.";
-}
 // Handle Purchase Request
 // ส่วนนี้คือจัดการตอนที่ User กดปุ่ม "ซื้อแพ็กเกจ" (Method POST)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $plan) {
