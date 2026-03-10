@@ -205,79 +205,176 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         .manual-info { background: #f8fafc; padding: 1.5rem; border-radius: 0.75rem; text-align: left; font-size: 0.9rem; border: 1px solid #e2e8f0; margin-top: 1rem; }
         .manual-info strong { color: var(--secondary); }
     </style>
+    <style>
+    .payment-split { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+    
+    .qr-box { 
+        background: white; 
+        padding: 2rem; 
+        border-radius: 1rem; 
+        text-align: center; 
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
+    }
+    
+    .qr-image { 
+        width: 256px; 
+        height: 256px; 
+        margin: 0 auto 1rem; 
+        background: #f3f4f6; 
+        border-radius: 0.5rem; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); 
+        overflow: hidden;
+    }
+    
+    /* ป้องกัน QR image ล้นกล่อง */
+    .qr-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+    }
+    
+    .upload-zone { 
+        border: 2px dashed #cbd5e1; 
+        border-radius: 1rem; 
+        padding: 2rem; 
+        text-align: center; 
+        transition: all 0.2s; 
+        cursor: pointer; 
+    }
+    .upload-zone:hover { border-color: var(--primary); background: #eff6ff; }
+    .upload-zone.has-file { border-color: #16a34a; background: #f0fdf4; }
+    
+    .manual-info { 
+        background: #f8fafc; 
+        padding: 1.5rem; 
+        border-radius: 0.75rem; 
+        text-align: left; 
+        font-size: 0.9rem; 
+        border: 1px solid #e2e8f0; 
+        margin-top: 1rem; 
+    }
+    .manual-info strong { color: #0f172a; }
+
+    /* ==================
+       MOBILE
+       ================== */
+    @media (max-width: 768px) {
+        
+        .payment-split { 
+            grid-template-columns: 1fr; 
+        }
+
+        /* QR box */
+        .qr-box {
+            padding: 1.25rem;
+        }
+
+        /* QR image — ไม่ fixed ขนาด ให้ขยายตามจอ */
+        .qr-image {
+            width: min(220px, 65vw);
+            height: min(220px, 65vw);
+        }
+
+        /* manual bank info */
+        .manual-info {
+            padding: 1rem;
+            font-size: 0.85rem;
+        }
+
+        /* upload zone */
+        .upload-zone {
+            padding: 1.5rem 1rem;
+        }
+
+        /* container padding */
+        .section .container {
+            padding-left: 1rem;
+            padding-right: 1rem;
+        }
+
+        /* card */
+        .card .card-body {
+            padding: 1.25rem;
+        }
+
+        /* confirm button เต็มความกว้าง */
+        .btn-block {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+        }
+    }
+
+    @media (max-width: 390px) {
+        .qr-image {
+            width: min(180px, 60vw);
+            height: min(180px, 60vw);
+        }
+
+        .qr-box {
+            padding: 1rem;
+        }
+    }
+</style>
 </head>
 <body>
 
- <!-- NAVBAR -->
+<!-- NAVBAR -->
 <nav class="navbar-home" id="navbar">
 <div class="navbar-container">
 
-<a href="/" class="navbar-logo">HIT THE <span>COURT</span></a>
+    <a href="/" class="navbar-logo">HIT THE <span>COURT</span></a>
 
-<button class="mobile-toggle" aria-label="Toggle menu">
-<div class="hamburger-box">
-<span class="bar"></span>
-<span class="bar"></span>
-<span class="bar"></span>
-</div>
-</button>
+    <button class="mobile-toggle" aria-label="Toggle menu">
+        <div class="hamburger-box">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+        </div>
+    </button>
 
-<ul class="nav-menu">
+    <ul class="nav-menu">
+        <li class="nav-item"><a href="/courts" class="nav-link">Courts</a></li>
+        <li class="nav-item"><a href="/reservations" class="nav-link">Reservations</a></li>
+        <li class="nav-item"><a href="/reports" class="nav-link">Contact Us</a></li>
+        <li class="nav-item"><a href="/guidebook" class="nav-link">Guidebook</a></li>
 
-<li class="nav-item">
-<a href="/courts" class="nav-link">Courts</a>
-</li>
+        <?php if (!isLoggedIn()): ?>
+        <!-- Login/SignUp เฉพาะ mobile overlay — desktop ซ่อนด้วย CSS -->
+        <li class="nav-auth-mobile-item">
+            <a href="/login"    class="btn btn-outline">Login</a>
+            <a href="/register" class="btn btn-primary">Sign Up</a>
+        </li>
+        <?php endif; ?>
+    </ul>
 
-<li class="nav-item">
-<a href="/reservations" class="nav-link">Reservations</a>
-</li>
+    <div class="nav-auth">
+        <?php if (isLoggedIn()): ?>
+            <div class="user-menu">
+                <button class="user-btn">
+                    <div class="user-avatar">
+                        <?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
+                    </div>
+                    <span><?= htmlspecialchars($_SESSION['username']) ?></span>
+                </button>
+                <div class="user-dropdown">
+                    <a href="/reservations" class="dropdown-link">My Bookings</a>
+                    <a href="/profile"      class="dropdown-link">My Profile</a>
+                    <a href="/membership"   class="dropdown-link">Membership</a>
+                    <a href="/api/auth.php?action=logout" class="dropdown-link" style="color:red;">Logout</a>
+                </div>
+            </div>
+        <?php else: ?>
+            <!-- Desktop เท่านั้น — mobile ถูกซ่อนด้วย CSS -->
+            <a href="/login"    class="btn btn-ghost">Login</a>
+            <a href="/register" class="btn btn-primary">Sign Up</a>
+        <?php endif; ?>
+    </div>
 
-<li class="nav-item">
-<a href="/reports" class="nav-link">Contact Us</a>
-</li>
-
-<li class="nav-item">
-<a href="/guidebook" class="nav-link">Guidebook</a>
-</li>
-
-</ul>
-
-<div class="nav-auth">
-
-<?php if (isLoggedIn()): ?>
-
-<div class="user-menu">
-
-<button class="user-btn">
-<div class="user-avatar">
-<?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
-</div>
-<span><?= htmlspecialchars($_SESSION['username']) ?></span>
-</button>
-
-<div class="user-dropdown">
-
-<a href="/reservations" class="dropdown-link">My Bookings</a>
-<a href="/profile" class="dropdown-link">My Profile</a>
-<a href="/membership" class="dropdown-link">Membership</a>
-
-<a href="/api/auth.php?action=logout" 
-class="dropdown-link" 
-style="color:red;">
-Logout
-</a>
-
-</div>
-</div>
-
-<?php else: ?>
-
-<a href="/login" class="btn btn-ghost">Login</a>
-<a href="/register" class="btn btn-primary">Sign Up</a>
-
-<?php endif; ?>
-
-</div>
 </div>
 </nav>
 

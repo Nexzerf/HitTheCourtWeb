@@ -57,72 +57,54 @@ function formatDuration($minutes) {
 <nav class="navbar-home" id="navbar">
 <div class="navbar-container">
 
-<a href="/" class="navbar-logo">HIT THE <span>COURT</span></a>
+    <a href="/" class="navbar-logo">HIT THE <span>COURT</span></a>
 
-<button class="mobile-toggle" aria-label="Toggle menu">
-<div class="hamburger-box">
-<span class="bar"></span>
-<span class="bar"></span>
-<span class="bar"></span>
-</div>
-</button>
+    <button class="mobile-toggle" aria-label="Toggle menu">
+        <div class="hamburger-box">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+        </div>
+    </button>
 
-<ul class="nav-menu">
+    <ul class="nav-menu">
+        <li class="nav-item"><a href="/courts" class="nav-link">Courts</a></li>
+        <li class="nav-item"><a href="/reservations" class="nav-link">Reservations</a></li>
+        <li class="nav-item"><a href="/reports" class="nav-link">Contact Us</a></li>
+        <li class="nav-item"><a href="/guidebook" class="nav-link">Guidebook</a></li>
 
-<li class="nav-item">
-<a href="/courts" class="nav-link">Courts</a>
-</li>
+        <?php if (!isLoggedIn()): ?>
+        <!-- Login/SignUp เฉพาะ mobile overlay — desktop ซ่อนด้วย CSS -->
+        <li class="nav-auth-mobile-item">
+            <a href="/login"    class="btn btn-outline">Login</a>
+            <a href="/register" class="btn btn-primary">Sign Up</a>
+        </li>
+        <?php endif; ?>
+    </ul>
 
-<li class="nav-item">
-<a href="/reservations" class="nav-link">Reservations</a>
-</li>
+    <div class="nav-auth">
+        <?php if (isLoggedIn()): ?>
+            <div class="user-menu">
+                <button class="user-btn">
+                    <div class="user-avatar">
+                        <?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
+                    </div>
+                    <span><?= htmlspecialchars($_SESSION['username']) ?></span>
+                </button>
+                <div class="user-dropdown">
+                    <a href="/reservations" class="dropdown-link">My Bookings</a>
+                    <a href="/profile"      class="dropdown-link">My Profile</a>
+                    <a href="/membership"   class="dropdown-link">Membership</a>
+                    <a href="/api/auth.php?action=logout" class="dropdown-link" style="color:red;">Logout</a>
+                </div>
+            </div>
+        <?php else: ?>
+            <!-- Desktop เท่านั้น — mobile ถูกซ่อนด้วย CSS -->
+            <a href="/login"    class="btn btn-ghost">Login</a>
+            <a href="/register" class="btn btn-primary">Sign Up</a>
+        <?php endif; ?>
+    </div>
 
-<li class="nav-item">
-<a href="/reports" class="nav-link">Contact Us</a>
-</li>
-
-<li class="nav-item">
-<a href="/guidebook" class="nav-link">Guidebook</a>
-</li>
-
-</ul>
-
-<div class="nav-auth">
-
-<?php if (isLoggedIn()): ?>
-
-<div class="user-menu">
-
-<button class="user-btn">
-<div class="user-avatar">
-<?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
-</div>
-<span><?= htmlspecialchars($_SESSION['username']) ?></span>
-</button>
-
-<div class="user-dropdown">
-
-<a href="/reservations" class="dropdown-link">My Bookings</a>
-<a href="/profile" class="dropdown-link">My Profile</a>
-<a href="/membership" class="dropdown-link">Membership</a>
-
-<a href="/api/auth.php?action=logout" 
-class="dropdown-link" 
-style="color:red;">
-Logout
-</a>
-
-</div>
-</div>
-
-<?php else: ?>
-
-<a href="/login" class="btn btn-ghost">Login</a>
-<a href="/register" class="btn btn-primary">Sign Up</a>
-
-<?php endif; ?>
-
-</div>
 </div>
 </nav>
 

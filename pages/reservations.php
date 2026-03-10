@@ -44,24 +44,40 @@ foreach ($bookings as $booking) {
 
 <!-- NAVBAR -->
 <nav class="navbar-home" id="navbar">
-    <div class="navbar-container">
-        <a href="/" class="navbar-logo">HIT THE <span>COURT</span></a>
-        <button class="mobile-toggle" aria-label="Toggle menu">
-            <div class="hamburger-box">
-                <span class="bar"></span><span class="bar"></span><span class="bar"></span>
-            </div>
-        </button>
-        <ul class="nav-menu">
-            <li class="nav-item"><a href="/courts"       class="nav-link">Courts</a></li>
-            <li class="nav-item"><a href="/reservations" class="nav-link">Reservations</a></li>
-            <li class="nav-item"><a href="/reports"      class="nav-link">Contact Us</a></li>
-            <li class="nav-item"><a href="/guidebook"    class="nav-link">Guidebook</a></li>
-        </ul>
-        <div class="nav-auth">
-            <?php if (isLoggedIn()): ?>
+<div class="navbar-container">
+
+    <a href="/" class="navbar-logo">HIT THE <span>COURT</span></a>
+
+    <button class="mobile-toggle" aria-label="Toggle menu">
+        <div class="hamburger-box">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+        </div>
+    </button>
+
+    <ul class="nav-menu">
+        <li class="nav-item"><a href="/courts" class="nav-link">Courts</a></li>
+        <li class="nav-item"><a href="/reservations" class="nav-link">Reservations</a></li>
+        <li class="nav-item"><a href="/reports" class="nav-link">Contact Us</a></li>
+        <li class="nav-item"><a href="/guidebook" class="nav-link">Guidebook</a></li>
+
+        <?php if (!isLoggedIn()): ?>
+        <!-- Login/SignUp เฉพาะ mobile overlay — desktop ซ่อนด้วย CSS -->
+        <li class="nav-auth-mobile-item">
+            <a href="/login"    class="btn btn-outline">Login</a>
+            <a href="/register" class="btn btn-primary">Sign Up</a>
+        </li>
+        <?php endif; ?>
+    </ul>
+
+    <div class="nav-auth">
+        <?php if (isLoggedIn()): ?>
             <div class="user-menu">
                 <button class="user-btn">
-                    <div class="user-avatar"><?= strtoupper(substr($_SESSION['username'], 0, 1)) ?></div>
+                    <div class="user-avatar">
+                        <?= strtoupper(substr($_SESSION['username'], 0, 1)) ?>
+                    </div>
                     <span><?= htmlspecialchars($_SESSION['username']) ?></span>
                 </button>
                 <div class="user-dropdown">
@@ -71,12 +87,14 @@ foreach ($bookings as $booking) {
                     <a href="/api/auth.php?action=logout" class="dropdown-link" style="color:red;">Logout</a>
                 </div>
             </div>
-            <?php else: ?>
+        <?php else: ?>
+            <!-- Desktop เท่านั้น — mobile ถูกซ่อนด้วย CSS -->
             <a href="/login"    class="btn btn-ghost">Login</a>
             <a href="/register" class="btn btn-primary">Sign Up</a>
-            <?php endif; ?>
-        </div>
+        <?php endif; ?>
     </div>
+
+</div>
 </nav>
 
 <!-- MAIN -->

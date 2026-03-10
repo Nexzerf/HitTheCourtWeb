@@ -72,7 +72,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    z-index: 1001; /* Ensure logo is above menu overlay */
+    z-index: 1001;
 }
 
 .navbar-logo span { color: var(--primary); }
@@ -233,9 +233,15 @@ body {
 }
 
 /* ===================================
+   MOBILE AUTH ITEM (ซ่อนบน desktop)
+   =================================== */
+.nav-auth-mobile-item {
+    display: none;
+}
+
+/* ===================================
    MOBILE TOGGLE BUTTON
    =================================== */
-
 .mobile-toggle {
     display: none;
     background: none;
@@ -293,10 +299,8 @@ body {
    =================================== */
 @media (max-width: 768px) {
 
-    /* แสดง hamburger */
     .mobile-toggle { display: flex; }
 
-    /* Navbar container */
     .navbar-container {
         display: flex;
         align-items: center;
@@ -306,27 +310,33 @@ body {
     }
 
     /* ===========================
-       NAV AUTH + USER BUTTON
+       NAV AUTH WRAPPER
        =========================== */
 
-    /* วางกึ่งกลาง navbar */
+    /* ย้าย nav-auth ไปอยู่ขวา ข้างๆ hamburger */
     .nav-auth {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%);
+        position: static;
+        left: unset;
+        top: unset;
+        transform: none;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.4rem;
         z-index: 1002;
+        order: 3;
+        margin-right: 0.5rem;
     }
 
-    /* user-menu ต้องเป็น relative เพื่อ anchor dropdown */
+    /* ซ่อน Login / Sign Up บน mobile navbar */
+    .nav-auth .btn-ghost,
+    .nav-auth .btn-primary {
+        display: none;
+    }
+
     .user-menu {
         position: relative;
     }
 
-    /* ล้าง pill background ออก แสดงแค่ avatar */
     .user-btn {
         display: flex;
         align-items: center;
@@ -341,11 +351,9 @@ body {
         cursor: pointer;
     }
 
-    /* ซ่อนชื่อและ chevron arrow */
     .user-btn > span { display: none; }
     .user-btn > svg  { display: none; }
 
-    /* Avatar ขนาดปกติ */
     .user-avatar {
         width: 34px;
         height: 34px;
@@ -356,12 +364,10 @@ body {
     /* ===========================
        USER DROPDOWN
        =========================== */
-
-    /* แสดงเป็น popup เล็กๆ ใต้ avatar — ไม่ fixed ไม่เต็มจอ */
     .user-dropdown {
         position: absolute;
         top: calc(100% + 10px);
-        right: -0.5rem;
+        right: 0;
         left: auto;
         width: 220px;
         border-radius: 0.875rem;
@@ -371,14 +377,13 @@ body {
         z-index: 1005;
     }
 
-    /* ปิด hover บน mobile */
+    /* ปิด hover บน mobile ใช้ .active จาก JS แทน */
     .user-menu:hover .user-dropdown {
         opacity: 0;
         visibility: hidden;
         transform: translateY(10px);
     }
 
-    /* เปิดด้วย .active จาก JavaScript */
     .user-menu.active .user-dropdown {
         opacity: 1;
         visibility: visible;
@@ -412,9 +417,46 @@ body {
 
     .nav-menu::before { display: none; }
 
-    /* เปิดเมนู */
     .navbar-home.menu-open .nav-menu {
         clip-path: inset(0 0 0 0%);
+    }
+
+    /* ===========================
+       LOGIN/SIGNUP ใน NAV OVERLAY
+       =========================== */
+    .nav-auth-mobile-item {
+        display: block;
+        width: 100%;
+        padding: 1.5rem 1.75rem;
+        margin-top: auto;
+        border-top: 1px solid #f1f5f9;
+        opacity: 0;
+        transform: translateX(20px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .navbar-home.menu-open .nav-auth-mobile-item {
+        opacity: 1;
+        transform: translateX(0);
+        transition-delay: 0.42s;
+    }
+
+    .navbar-home:not(.menu-open) .nav-auth-mobile-item {
+        transition-delay: 0s !important;
+    }
+
+    .nav-auth-mobile-item .btn {
+        width: 100%;
+        justify-content: center;
+        padding: 0.85rem 1.25rem;
+        font-size: 1rem;
+        border-radius: var(--radius);
+        margin-bottom: 0.5rem;
+        display: flex;
+    }
+
+    .nav-auth-mobile-item .btn:last-child {
+        margin-bottom: 0;
     }
 
     /* ===========================
@@ -438,7 +480,6 @@ body {
     .navbar-home.menu-open .nav-item:nth-child(4)  { transition-delay: 0.30s; }
     .navbar-home.menu-open .nav-item:nth-child(5)  { transition-delay: 0.36s; }
 
-    /* ปิดเมนู: reset delay */
     .navbar-home:not(.menu-open) .nav-item { transition-delay: 0s !important; }
 
     /* ===========================
@@ -1267,218 +1308,147 @@ body {
         margin-top: 10px;
     }
 }
-/* ===================================
-   PROFILE PAGE STYLES
-   =================================== */
-
-.profile-container {
-    max-width: 1000px;
-    margin: 0 auto;
-    padding: 2rem;
-    padding-top: 120px;
-}
-
-/* Profile Header Card */
-.profile-header {
-    background: linear-gradient(135deg, var(--primary) 0%, #1D4ED8 100%);
-    border-radius: 1.5rem;
-    padding: 3rem 2rem;
-    color: white;
-    text-align: center;
-    margin-bottom: 2rem;
-    position: relative;
-    overflow: hidden;
-    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.2);
-}
-
-.profile-header::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
-    opacity: 0.3;
-}
-
-.profile-avatar-large {
-    width: 100px;
-    height: 100px;
-    background: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0 auto 1.5rem;
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: var(--primary);
-    box-shadow: 0 8px 16px rgba(0,0,0,0.2);
-    position: relative;
-    z-index: 1;
-}
-
-.profile-info h1 {
-    font-family: var(--font-display);
-    font-size: 2rem;
-    margin: 0;
-    position: relative;
-    z-index: 1;
-}
-
-.profile-info p {
-    opacity: 0.9;
-    margin-top: 0.5rem;
-    position: relative;
-    z-index: 1;
-}
-
-.member-badge-profile {
-    display: inline-block;
-    background: rgba(255,255,255,0.2);
-    backdrop-filter: blur(4px);
-    padding: 0.5rem 1.5rem;
-    border-radius: 2rem;
-    margin-top: 1rem;
-    font-weight: 600;
-    border: 1px solid rgba(255,255,255,0.3);
-}
-
-/* Content Grid */
-.profile-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 2rem;
-}
+/* =========================================
+   PROFILE PAGE — MOBILE RESPONSIVE
+   ========================================= */
 
 @media (max-width: 768px) {
+
+    /* Container */
+    .profile-container {
+        padding: 1.25rem;
+        padding-top: 100px;
+    }
+
+    /* Profile Header */
+    .profile-header {
+        padding: 2rem 1.5rem;
+        border-radius: 1.25rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .profile-avatar-large {
+        width: 80px;
+        height: 80px;
+        font-size: 2rem;
+        margin-bottom: 1rem;
+    }
+
+    .profile-info h1 {
+        font-size: 1.5rem;
+    }
+
+    .profile-info p {
+        font-size: 0.9rem;
+    }
+
+    .member-badge-profile {
+        padding: 0.4rem 1.25rem;
+        font-size: 0.85rem;
+    }
+
+    /* Grid → single column */
     .profile-grid {
         grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+
+    /* Cards */
+    .profile-card {
+        border-radius: 1.25rem;
+    }
+
+    .card-header {
+        padding: 1.25rem 1.5rem;
+    }
+
+    .card-header h3 {
+        font-size: 1.1rem;
+    }
+
+    .card-body {
+        padding: 1.5rem;
+    }
+
+    /* Form */
+    .form-group-profile {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-input-profile {
+        padding: 0.75rem 0.875rem;
+        font-size: 0.95rem;
+        border-radius: 0.625rem;
+    }
+
+    .btn-save {
+        padding: 0.875rem;
+        font-size: 0.95rem;
+        border-radius: 0.625rem;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.75rem;
+    }
+
+    .stat-box {
+        padding: 1.25rem 1rem;
+        border-radius: 0.875rem;
+    }
+
+    .stat-number {
+        font-size: 1.6rem;
+    }
+
+    .stat-label {
+        font-size: 0.8rem;
+    }
+
+    /* Alert */
+    .alert-success-profile {
+        padding: 0.875rem 1.25rem;
+        font-size: 0.9rem;
+        gap: 0.5rem;
+        border-radius: 0.625rem;
     }
 }
 
-/* Cards */
-.profile-card {
-    background: white;
-    border-radius: 1.5rem;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-    overflow: hidden;
-}
+/* Small phones */
+@media (max-width: 390px) {
 
-.card-header {
-    padding: 1.5rem 2rem;
-    border-bottom: 1px solid var(--gray-100);
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
+    .profile-container {
+        padding: 1rem;
+        padding-top: 95px;
+    }
 
-.card-header h3 {
-    margin: 0;
-    font-family: var(--font-display);
-    font-size: 1.25rem;
-}
+    .profile-header {
+        padding: 1.75rem 1.25rem;
+    }
 
-.card-header svg {
-    color: var(--primary);
-}
+    .profile-avatar-large {
+        width: 70px;
+        height: 70px;
+        font-size: 1.75rem;
+    }
 
-.card-body {
-    padding: 2rem;
-}
+    .profile-info h1 {
+        font-size: 1.3rem;
+    }
 
-/* Form Styles */
-.form-group-profile {
-    margin-bottom: 1.5rem;
-}
+    .stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
 
-.form-label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--gray-600);
-    margin-bottom: 0.5rem;
-}
+    .stat-number {
+        font-size: 1.4rem;
+    }
 
-.form-input-profile {
-    width: 100%;
-    padding: 0.875rem 1rem;
-    border: 1px solid var(--gray-200);
-    border-radius: 0.75rem;
-    font-size: 1rem;
-    transition: all 0.2s;
-    background: var(--gray-50);
+    .card-body {
+        padding: 1.25rem;
+    }
 }
-
-.form-input-profile:focus {
-    outline: none;
-    border-color: var(--primary);
-    background: white;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.form-input-profile:disabled {
-    background: var(--gray-100);
-    cursor: not-allowed;
-    color: var(--gray-500);
-}
-
-.btn-save {
-    width: 100%;
-    padding: 1rem;
-    background: var(--secondary);
-    color: white;
-    border: none;
-    border-radius: 0.75rem;
-    font-weight: 600;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-
-.btn-save:hover {
-    background: var(--primary);
-}
-
-/* Stats Box */
-.stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-}
-
-.stat-box {
-    background: var(--gray-50);
-    padding: 1.5rem;
-    border-radius: 1rem;
-    text-align: center;
-    border: 1px solid var(--gray-100);
-}
-
-.stat-number {
-    font-family: var(--font-display);
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--primary);
-    margin-bottom: 0.25rem;
-}
-
-.stat-label {
-    font-size: 0.85rem;
-    color: var(--gray-500);
-}
-
-/* Alert */
-.alert-success-profile {
-    background: #DCFCE7;
-    color: #166534;
-    padding: 1rem 1.5rem;
-    border-radius: 0.75rem;
-    margin-bottom: 1.5rem;
-    border: 1px solid #BBF7D0;
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-}
-
 /* ===================================
    MEMBERSHIP PAGE STYLES
    =================================== */
