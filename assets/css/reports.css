@@ -1,0 +1,476 @@
+/* ===================================
+   REPORTS PAGE STYLES
+   =================================== */
+ 
+.reports-page-header {
+    margin-bottom: 2rem;
+}
+
+.reports-page-header h1 {
+    font-family: var(--font-display);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--secondary);
+    margin-bottom: 0.25rem;
+}
+
+.reports-page-header p {
+    color: var(--gray-500);
+    font-size: 0.95rem;
+}
+
+/* Layout: 2 columns */
+.reports-layout {
+    display: grid;
+    grid-template-columns: 1fr 400px;
+    gap: 2rem;
+    align-items: start;
+}
+
+/* ===================================
+   TABS
+   =================================== */
+.reports-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.25rem;
+    border-bottom: 2px solid #E2E8F0;
+    padding-bottom: 0;
+}
+
+.report-tab {
+    padding: 0.6rem 1.25rem;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--gray-500);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.report-tab:hover { color: var(--secondary); }
+
+.report-tab.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+}
+
+.tab-badge {
+    background: #E2E8F0;
+    color: #64748B;
+    font-size: 0.75rem;
+    font-weight: 700;
+    padding: 0.1rem 0.5rem;
+    border-radius: 1rem;
+    min-width: 20px;
+    text-align: center;
+}
+
+.report-tab.active .tab-badge {
+    background: #DBEAFE;
+    color: var(--primary);
+}
+
+/* ===================================
+   REPORTS GRID
+   =================================== */
+.reports-grid {
+    display: grid;
+    gap: 1rem;
+}
+
+/* ===================================
+   EMPTY STATE
+   =================================== */
+.reports-empty {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: #94A3B8;
+}
+
+.reports-empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 1rem;
+    color: #CBD5E1;
+}
+
+.reports-empty-icon svg {
+    width: 100%;
+    height: 100%;
+}
+
+.reports-empty h3 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #64748B;
+    margin-bottom: 0.25rem;
+}
+
+.reports-empty p {
+    font-size: 0.875rem;
+}
+
+/* ===================================
+   REPORT CARD
+   =================================== */
+.report-card {
+    background: white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    border: 1px solid #E2E8F0;
+    transition: box-shadow 0.2s;
+}
+
+.report-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+}
+
+.report-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.report-card-title {
+    font-weight: 600;
+    font-size: 1rem;
+    color: var(--secondary);
+    margin: 0;
+}
+
+.report-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.report-status.new         { background: #DBEAFE; color: #1D4ED8; }
+.report-status.in_progress { background: #FEF3C7; color: #D97706; }
+.report-status.resolved    { background: #DCFCE7; color: #16A34A; }
+
+.report-card-content {
+    font-size: 0.9rem;
+    color: #475569;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+}
+
+.admin-response {
+    background: #F8FAFC;
+    border-left: 3px solid var(--primary);
+    padding: 0.75rem 1rem;
+    border-radius: 0 0.5rem 0.5rem 0;
+    margin-bottom: 1rem;
+}
+
+.admin-response-label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--primary);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.admin-response p {
+    font-size: 0.875rem;
+    color: #334155;
+    margin: 0;
+}
+
+.report-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #F1F5F9;
+}
+
+.report-card-date {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: #94A3B8;
+}
+
+.report-card-date svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+}
+
+.report-code {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #94A3B8;
+    font-family: monospace;
+}
+
+/* ===================================
+   SUBMIT FORM CARD
+   =================================== */
+.submit-card {
+    background: white;
+    border-radius: 1.5rem;
+    border: 1px solid #E2E8F0;
+    overflow: hidden;
+    position: sticky;
+    top: 96px;
+}
+
+.submit-card-header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #F1F5F9;
+    background: linear-gradient(135deg, var(--secondary) 0%, #1E293B 100%);
+    color: white;
+}
+
+.submit-card-header h3 {
+    font-family: var(--font-display);
+    font-size: 1.25rem;
+    margin: 0 0 0.25rem;
+}
+
+.submit-card-header p {
+    font-size: 0.85rem;
+    opacity: 0.7;
+    margin: 0;
+}
+
+.submit-card-body {
+    padding: 1.5rem 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.25rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #334155;
+    margin-bottom: 0.5rem;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid #E2E8F0;
+    border-radius: 0.75rem;
+    font-size: 0.95rem;
+    font-family: var(--font-body);
+    background: #F8FAFC;
+    transition: all 0.2s;
+    color: var(--secondary);
+    /* ป้องกันการ Zoom บน iPhone */
+    
+}
+
+.form-control:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: white;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+textarea.form-control {
+    resize: vertical;
+    min-height: 100px;
+}
+
+.form-hint {
+    font-size: 0.78rem;
+    color: #94A3B8;
+    margin-top: 0.25rem;
+    display: block;
+}
+
+.btn-submit {
+    width: 100%;
+    padding: 0.875rem;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 0.75rem;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+    font-family: var(--font-body);
+}
+
+.btn-submit:hover {
+    background: var(--primary-dark);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+}
+
+/* Alert Toast */
+.alert-toast {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 1.25rem;
+}
+
+.alert-toast svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+.alert-toast.success { background: #DCFCE7; color: #166534; border: 1px solid #BBF7D0; }
+.alert-toast.error   { background: #FEF2F2; color: #991B1B; border: 1px solid #FECACA; }
+
+/* ===================================
+   RESPONSIVE - MOBILE OPTIMIZATION
+   =================================== */
+
+/* Tablet และจอเล็ก */
+@media (max-width: 900px) {
+    .reports-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .submit-card {
+        position: static;
+    }
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    
+    /* --- Global Settings --- */
+    .reports-layout,
+    .reports-grid {
+        max-width: 100vw;
+        overflow-x: hidden;
+    }
+
+    /* --- Header --- */
+    .reports-page-header {
+        margin-bottom: 1.5rem;
+    }
+    .reports-page-header h1 { font-size: 1.5rem; }
+    .reports-page-header p  { font-size: 0.9rem; }
+
+    /* --- Layout Re-order --- */
+    .reports-layout {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+    }
+    /* สลับตำแหน่ง: Form ขึ้นก่อน List */
+    .reports-layout > div:first-child { order: 2; }
+    .submit-card                      { order: 1; }
+
+    /* --- TABS (แก้ไข: แบ่งพื้นที่เท่ากัน ไม่ต้องเลื่อน) --- */
+    .reports-tabs {
+        display: flex;
+        width: 100%;
+        overflow: visible; /* ปิดการเลื่อน */
+        overflow-x: visible;
+        gap: 0; /* ไม่มีช่องว่างระหว่าง tab */
+        border-bottom: 1px solid #E2E8F0;
+    }
+
+    .report-tab {
+        flex: 1; /* << สำคัญมาก: บังคับให้แต่ละ Tab กว้างเท่ากัน */
+        text-align: center; /* จัดตัวหนังสือให้อยู่กึ่งกลางช่อง */
+        justify-content: center; /* จัด content (icon/text) ให้กึ่งกลาง */
+        padding: 0.75rem 0.5rem; /* ลด padding ซ้าย-ขวา เพื่อประหยัดพื้นที่ */
+        font-size: 0.85rem;
+        white-space: nowrap; /* กันไม่ให้ขึ้นบรรทัดใหม่ */
+        flex-shrink: 1; /* อนุญาตให้หดได้ถ้าจอแคบมาก */
+    }
+    
+    /* ปรับ Badge ให้เล็กลงนิดหน่อยบนมือถือ */
+    .tab-badge {
+        font-size: 0.7rem;
+        padding: 0.1rem 0.4rem;
+    }
+
+    /* --- SUBMIT CARD (Mobile) --- */
+    .submit-card {
+        border-radius: 1rem;
+    }
+    .submit-card-header {
+        padding: 1.25rem;
+        border-radius: 1rem 1rem 0 0;
+    }
+    .submit-card-header h3 { font-size: 1.1rem; }
+    .submit-card-body { padding: 1.25rem; }
+
+    /* FIX: iOS Zoom (font-size >= 16px) */
+    .form-control {
+        font-size: 16px; 
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+    }
+    textarea.form-control { min-height: 120px; }
+    .btn-submit {
+        padding: 1rem;
+        font-size: 1rem;
+    }
+
+    /* --- REPORT CARDS (Mobile) --- */
+    .report-card {
+        padding: 1.25rem;
+        border-radius: 0.75rem;
+    }
+    .report-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    .report-card-title { font-size: 1rem; }
+    .report-status {
+        margin-top: 0.25rem;
+        font-size: 0.75rem;
+    }
+    .report-card-footer {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    .admin-response {
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
+        border-radius: 0 0.5rem 0.5rem 0;
+    }
+    .reports-empty { padding: 2.5rem 1rem; }
+}
+
+/* Small Phones */
+@media (max-width: 400px) {
+    .reports-page-header h1 { font-size: 1.35rem; }
+    
+    /* ปรับ Padding ให้แน่นขึ้น */
+    .submit-card-header, .submit-card-body { padding: 1rem; }
+    
+    /* ปรับ Tab ให้เล็กลงอีกนิดสำหรับจอแคบมาก */
+    .report-tab {
+        font-size: 0.8rem;
+        padding: 0.6rem 0.25rem;
+    }
+}

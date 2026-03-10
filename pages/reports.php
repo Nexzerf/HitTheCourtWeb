@@ -82,10 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <!-- เพิ่ม style.css กลับเข้าไป -->
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/home.css">
+    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/reports.css"> 
         <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
 </head>
-<body>
+<body style="overflow-x: hidden;">
 <!-- NAVBAR -->
 <nav class="navbar-home" id="navbar">
 <div class="navbar-container">
@@ -201,7 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </svg>
                             </div>
                             <h3><?= $meta['empty'] ?></h3>
-                            <p>Submit a report using the form on the right.</p>
+                           <p>Submit a report using the form below.</p>
                         </div>
 
                     <?php else: ?>
