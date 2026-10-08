@@ -42,15 +42,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             
             // เช็คว่าเป็นไฟล์รูปจริงไหม และขนาดไม่เกิน 5MB
             if (in_array($file['type'], $allowedTypes) && $file['size'] <= 5 * 1024 * 1024) {
-                // เตรียมที่เก็บไฟล์
-                $uploadDir = UPLOAD_PATH . 'reports/';
-                if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-                
                 // ตั้งชื่อไฟล์ใหม่ให้ไม่ซ้ำ
                 $filename = uniqid() . '_' . basename($file['name']);
-                // ย้ายไฟล์ไปเก็บ
-                if (move_uploaded_file($file['tmp_name'], $uploadDir . $filename)) {
-                    $imagePath = 'uploads/reports/' . $filename;
+                // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า)
+                $upload = saveUploadedFile($file, 'reports', $filename);
+                if ($upload) {
+                    $imagePath = $upload['path'];
                 }
             }
         }

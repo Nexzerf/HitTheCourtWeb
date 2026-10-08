@@ -1,0 +1,5 @@
+# ไฟล์ที่ไม่ต้องอัปโหลดขึ้น Vercel
+*.sql
+.htaccess
+config.local.php
+README.md

@@ -106,16 +106,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // เช็คขนาดไฟล์ ห้ามเกิน 5MB
         if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large. Maximum 5MB');
 
-        // หาที่เก็บไฟล์ ถ้าโฟลเดอร์ไม่มีก็สร้างใหม่
-        $uploadDir = UPLOAD_PATH . 'slips/';
-        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-        
         // ตั้งชื่อไฟล์ใหม่ให้สวยงาม มี ID และเวลา
         $filename = 'mem_' . $membershipId . '_' . time() . '.jpg';
-        $targetFile = $uploadDir . $filename;
         
-        // ย้ายไฟล์จาก temp ไปเก็บในโฟลเดอร์จริง ถ้าย้ายไม่สำเร็จก็โยน Error
-        if (!move_uploaded_file($file['tmp_name'], $targetFile)) throw new Exception('Failed to upload file.');
+        // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า) ถ้าไม่สำเร็จก็โยน Error
+        $upload = saveUploadedFile($file, 'slips', $filename);
+        if (!$upload) throw new Exception('Failed to upload file.');
+        $targetFile = $upload['local'];
 
         // --- CALL VERIFY API ---
         // ตอนนี้ถึงเวลาเอาสลิปไปให้ AI อ่านแล้ว (Verify)
@@ -142,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 1. Update Membership Status
         // อัปเดตสถานะตาราง user_membership ว่า "verified" และเก็บที่อยู่รูปสลิป
         $stmt = $pdo->prepare("UPDATE user_membership SET slip_image = ?, payment_status = 'verified' WHERE id = ?");
-        $stmt->execute(['uploads/slips/' . $filename, $membershipId]);
+        $stmt->execute([$upload['path'], $membershipId]);
 
         // 2. Update User to Premium (is_member = 1)
         // FIX: ใช้ค่า end_date จากตาราง user_membership โดยตรง จะแม่นยำกว่าคำนวณใหม่

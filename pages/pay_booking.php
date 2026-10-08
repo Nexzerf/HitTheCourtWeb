@@ -102,16 +102,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // เช็คขนาดไฟล์ ห้ามเกิน 5MB
         if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large');
 
-        // เตรียมที่เก็บไฟล์ ถ้าไม่มีโฟลเดอร์ก็สร้างใหม่
-        $uploadDir = UPLOAD_PATH . 'slips/';
-        if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
-        
         // ตั้งชื่อไฟล์ใหม่ให้สวยงาม
         $filename = 'bk_' . $bookingId . '_' . time() . '.jpg';
-        $targetFile = $uploadDir . $filename;
         
-        // ย้ายไฟล์ไปเก็บ
-        if (!move_uploaded_file($file['tmp_name'], $targetFile)) throw new Exception('Failed to upload file.');
+        // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า)
+        $upload = saveUploadedFile($file, 'slips', $filename);
+        if (!$upload) throw new Exception('Failed to upload file.');
+        $targetFile = $upload['local'];
 
         // เรียก API เพื่ออ่านข้อมูลจากสลิป
         $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
@@ -160,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->beginTransaction();
         // 1. บันทึกประวัติการจ่ายเงิน
         $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, slip_image, payment_status, verified_at) VALUES (?, 'promptpay', ?, ?, 'verified', NOW())")
-            ->execute([$bookingId, $paidAmount, 'uploads/slips/' . $filename]);
+            ->execute([$bookingId, $paidAmount, $upload['path']]);
         // 2. อัปเดตสถานะการจองเป็น 'paid'
         $pdo->prepare("UPDATE bookings SET payment_status = 'paid', expires_at = NULL WHERE booking_id = ?")->execute([$bookingId]);
         // 3. เพิ่มแต้มให้ User และนับจำนวนการจอง
