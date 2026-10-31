@@ -5,7 +5,8 @@
 // ============================================
 date_default_timezone_set('Asia/Bangkok');
 // เก็บ output ไว้ก่อน กันข้อความหลุดออกไปก่อน header() ทำให้ redirect ไม่ทำงาน (หน้าขาว)
-if (PHP_SAPI !== 'cli' && ob_get_level() === 0) ob_start();
+// และเติม CSRF token ให้ทุกฟอร์ม POST อัตโนมัติ (ดู injectCsrfFields ด้านล่าง)
+if (PHP_SAPI !== 'cli') ob_start('injectCsrfFields');
 /**
  * HIT THE COURT - Main Configuration File
  * 
@@ -242,6 +243,52 @@ require_once __DIR__ . '/includes/icons.php';
 require_once __DIR__ . '/includes/booking_rules.php';
 
 // ============================================
+// SECURITY HEADERS + CSRF
+// ============================================
+if (PHP_SAPI !== 'cli' && !headers_sent()) {
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');                         // กันเว็บอื่นเอาหน้าเราไปใส่ iframe (clickjacking)
+    header("Content-Security-Policy: frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
+    if ($isHttps) header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
+
+/** เติมช่อง CSRF ลงในทุก <form method="POST"> ของหน้า HTML (ถ้ายังไม่มี) */
+function injectCsrfFields(string $html): string {
+    // ตอนที่ PHP ส่ง output ออก session ปิดไปแล้ว จึงใช้ token ที่เตรียมไว้ตั้งแต่ต้น Request
+    $field = $GLOBALS['CSRF_FIELD'] ?? null;
+    if (!$field || stripos($html, '<form') === false) return $html;
+    foreach (headers_list() as $h) {
+        if (stripos($h, 'Content-Type:') === 0 && stripos($h, 'text/html') === false) return $html;
+    }
+    return preg_replace_callback('/<form\b[^>]*\bmethod\s*=\s*["\']?post["\']?[^>]*>/i', function ($m) use ($field) {
+        return $m[0] . $field;
+    }, $html);
+}
+
+if (session_status() === PHP_SESSION_ACTIVE) $GLOBALS['CSRF_FIELD'] = csrfField();
+
+// ทุกคำขอแบบ POST ต้องมี CSRF token ที่ถูกต้อง (กันเว็บอื่นแอบส่งฟอร์มแทนผู้ใช้)
+if (PHP_SAPI !== 'cli' && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
+    $sent = (string) ($_POST['csrf'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '');
+    if ($sent === '' || !hash_equals(csrfToken(), $sent)) {
+        http_response_code(403);
+        // ไฟล์ใหญ่เกิน post_max_size ทำให้ $_POST ว่าง ก็จะมาตกที่นี่เหมือนกัน
+        $tooBig = empty($_POST) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0;
+        $msg = $tooBig ? t('pay.err_size') : t('err.csrf');
+        if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json') || str_contains($_SERVER['SCRIPT_NAME'] ?? '', '/api/quote.php')) {
+            header('Content-Type: application/json; charset=utf-8');
+            exit(json_encode(['ok' => false, 'html' => '<div class="alert alert-danger">' . htmlspecialchars($msg) . '</div>', 'total_text' => null]));
+        }
+        exit('<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>403</title>'
+            . '<div style="font-family:sans-serif;max-width:480px;margin:15vh auto;padding:24px;text-align:center">'
+            . '<h1 style="font-size:1.3rem">' . htmlspecialchars($msg) . '</h1>'
+            . '<p><a href="' . htmlspecialchars($_SERVER['REQUEST_URI'] ?? '/') . '" style="color:#2563EB">' . htmlspecialchars(t('common.reload')) . '</a></p></div>');
+    }
+}
+
+// ============================================
 // FILE UPLOADS
 // ============================================
 /**
@@ -363,6 +410,42 @@ function requireAdmin() {
     if (!isAdmin()) {
         redirect('/admin/login.php');
     }
+}
+
+/**
+ * จำกัดการเดารหัสผ่าน: ผิดเกิน 5 ครั้งใน 15 นาที (ต่อชื่อผู้ใช้ ต่อ IP) จะล็อกชั่วคราว
+ * เก็บในตาราง sessions (ใช้ id แบบพิเศษขึ้นต้นด้วย "throttle:") จึงไม่ต้องสร้างตารางใหม่ และใช้ได้แม้ผู้โจมตีลบคุกกี้
+ */
+const LOGIN_MAX_FAILS = 5;
+const LOGIN_LOCK_SECONDS = 900;
+function loginThrottleKey(string $scope, string $username): string {
+    $ip = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? $_SERVER['REMOTE_ADDR'] ?? '';
+    $ip = trim(explode(',', $ip)[0]);
+    return 'throttle:' . substr(hash('sha256', $scope . '|' . strtolower($username) . '|' . $ip), 0, 40);
+}
+function loginThrottleState(string $key): array {
+    global $pdo;
+    $st = $pdo->prepare("SELECT data, last_activity FROM sessions WHERE id = ?");
+    $st->execute([$key]);
+    $row = $st->fetch();
+    if (!$row || (int) $row['last_activity'] < time() - LOGIN_LOCK_SECONDS) return ['fails' => 0, 'since' => time()];
+    return ['fails' => (int) $row['data'], 'since' => (int) $row['last_activity']];
+}
+function loginIsLocked(string $key): bool {
+    return loginThrottleState($key)['fails'] >= LOGIN_MAX_FAILS;
+}
+function loginRecordFailure(string $key): void {
+    global $pdo;
+    $state = loginThrottleState($key);
+    $fails = $state['fails'] + 1;
+    $since = $state['fails'] === 0 ? time() : $state['since'];
+    $pdo->prepare("DELETE FROM sessions WHERE id = ?")->execute([$key]);
+    $pdo->prepare("INSERT INTO sessions (id, data, last_activity) VALUES (?, ?, ?)")->execute([$key, (string) $fails, $since]);
+    usleep(300000); // ช้าลงนิดหน่อยทุกครั้งที่ผิด
+}
+function loginClearFailures(string $key): void {
+    global $pdo;
+    $pdo->prepare("DELETE FROM sessions WHERE id = ?")->execute([$key]);
 }
 
 /** ตัวดำเนินการค้นหาแบบไม่สนตัวพิมพ์เล็กใหญ่ (MySQL ทำอยู่แล้ว, PostgreSQL ต้องใช้ ILIKE) */

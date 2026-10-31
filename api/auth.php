@@ -3,6 +3,11 @@ require_once '../config.php';
 
 // รับค่า action จาก URL
  $action = $_GET['action'] ?? '';
+// ลิงก์ออกจากระบบต้องมี token ของ session นี้ (กันเว็บอื่นแอบสั่งให้ผู้ใช้ออกจากระบบ)
+if (in_array($action, ['logout', 'admin_logout'], true) && !hash_equals(csrfToken(), (string) ($_GET['t'] ?? ''))) {
+    header("Location: " . SITE_URL . ($action === 'admin_logout' ? '/admin/dashboard.php' : '/'));
+    exit();
+}
 
 // ==================================================
 // LOGOUT สำหรับผู้ใช้ทั่วไป
@@ -52,4 +57,3 @@ if ($action === 'admin_logout') {
 // ==================================================
 header("Location: " . SITE_URL);
 exit();
-?>

@@ -286,9 +286,10 @@ include '../includes/head.php';
                         <div id="summary" aria-live="polite"><p class="muted mb-0"><?= e('booking.summary_empty') ?></p></div>
 
                         <?php if ($isMember && !$editId): ?>
-                        <label class="points-toggle<?= (int) $user['points'] >= POINTS_FOR_FREE_ROUND ? '' : ' is-disabled' ?>">
-                            <input type="checkbox" name="use_points" value="1" <?= (int) $user['points'] >= POINTS_FOR_FREE_ROUND ? '' : 'disabled' ?>>
-                            <span><?= icon('trophy', 16) ?> <?= e('booking.use_points', ['points' => (int) $user['points'], 'need' => POINTS_FOR_FREE_ROUND]) ?></span>
+                        <?php $availPts = availablePoints($pdo, $user); ?>
+                        <label class="points-toggle<?= $availPts >= POINTS_FOR_FREE_ROUND ? '' : ' is-disabled' ?>">
+                            <input type="checkbox" name="use_points" value="1" <?= $availPts >= POINTS_FOR_FREE_ROUND ? '' : 'disabled' ?>>
+                            <span><?= icon('trophy', 16) ?> <?= e('booking.use_points', ['points' => $availPts, 'need' => POINTS_FOR_FREE_ROUND]) ?></span>
                         </label>
                         <?php endif; ?>
 

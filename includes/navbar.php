@@ -34,7 +34,7 @@ $activeNav = $activeAlias[$currentPage] ?? $currentPage;
                     <a href="<?= SITE_URL ?>/reservations" class="sn-link"><?= e('nav.my_bookings') ?></a>
                     <a href="<?= SITE_URL ?>/profile" class="sn-link<?= $activeNav === 'profile' ? ' is-active' : '' ?>"><?= e('nav.profile') ?></a>
                     <a href="<?= SITE_URL ?>/membership" class="sn-link<?= $activeNav === 'membership' ? ' is-active' : '' ?>"><?= e('nav.membership') ?></a>
-                    <a href="<?= SITE_URL ?>/api/auth.php?action=logout" class="sn-link sn-danger"><?= e('nav.logout') ?></a>
+                    <a href="<?= SITE_URL ?>/api/auth.php?action=logout&amp;t=<?= csrfToken() ?>" class="sn-link sn-danger"><?= e('nav.logout') ?></a>
                 <?php else: ?>
                     <a href="<?= SITE_URL ?>/login" class="sn-btn sn-btn-outline"><?= e('nav.login') ?></a>
                     <a href="<?= SITE_URL ?>/register" class="sn-btn sn-btn-primary"><?= e('nav.signup') ?></a>
@@ -54,7 +54,7 @@ $activeNav = $activeAlias[$currentPage] ?? $currentPage;
                         <a href="<?= SITE_URL ?>/reservations" role="menuitem"><?= e('nav.my_bookings') ?></a>
                         <a href="<?= SITE_URL ?>/profile" role="menuitem"><?= e('nav.profile') ?></a>
                         <a href="<?= SITE_URL ?>/membership" role="menuitem"><?= e('nav.membership') ?></a>
-                        <a href="<?= SITE_URL ?>/api/auth.php?action=logout" role="menuitem" class="sn-danger"><?= e('nav.logout') ?></a>
+                        <a href="<?= SITE_URL ?>/api/auth.php?action=logout&amp;t=<?= csrfToken() ?>" role="menuitem" class="sn-danger"><?= e('nav.logout') ?></a>
                     </div>
                 </div>
             <?php else: ?>

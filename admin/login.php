@@ -9,10 +9,15 @@ $error = '';
 $username = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
+    $throttle = loginThrottleKey('admin', $username);
+    if (loginIsLocked($throttle)) {
+        $error = t('auth.err_locked');
+    } else {
     $stmt = $pdo->prepare("SELECT * FROM admins WHERE LOWER(username) = LOWER(?) AND status = 'active'");
     $stmt->execute([$username]);
     $admin = $stmt->fetch();
     if ($admin && password_verify($_POST['password'] ?? '', $admin['password'])) {
+        loginClearFailures($throttle);
         session_regenerate_id(true);
         $_SESSION['admin_id'] = $admin['admin_id'];
         $_SESSION['admin_username'] = $admin['username'];
@@ -20,7 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pdo->prepare("UPDATE admins SET last_login = ? WHERE admin_id = ?")->execute([date('Y-m-d H:i:s'), $admin['admin_id']]);
         redirect('/admin/dashboard.php');
     }
+    loginRecordFailure($throttle);
     $error = t('auth.err_invalid');
+    }
 }
 
 $authTitle = t('admin.login_title');

@@ -537,4 +537,11 @@ return [
     'pay.qr_scanning' => 'Checking the slip for a QR code…',
     'pay.qr_ok' => 'QR code found. You can confirm now.',
     'pay.err_no_qr' => 'Invalid slip: no QR code was found in this image. Please attach a transfer slip with a clear QR code.',
+    'common.reload' => 'Reload this page',
+    'auth.err_locked' => 'Too many failed attempts. Please wait 15 minutes and try again.',
+    'admin.nav_account' => 'Admin account',
+    'admin.err_password_short' => 'Admin passwords must be at least 12 characters.',
+    'admin.err_password_weak' => 'This password is too easy to guess.',
+    'admin.password_hint' => 'At least 12 characters; mix upper case, numbers and symbols.',
+    'pay.err_points' => 'You no longer have enough points for the free round in this booking. Please edit the booking to remove the points.',
 ];

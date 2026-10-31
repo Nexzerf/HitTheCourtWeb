@@ -39,8 +39,9 @@ $newReports = (int) $pdo->query("SELECT COUNT(*) FROM reports WHERE status = 'ne
             <?php endforeach; ?>
         </nav>
         <div class="admin-side-foot">
+            <a href="<?= SITE_URL ?>/admin/account.php" class="<?= $adminPage === 'account' ? 'is-active' : '' ?>"><?= icon('lock', 16) ?> <?= e('admin.nav_account') ?></a>
             <a href="<?= SITE_URL ?>/" target="_blank" rel="noopener"><?= icon('home', 16) ?> <?= e('admin.view_site') ?></a>
-            <a href="<?= SITE_URL ?>/api/auth.php?action=admin_logout"><?= icon('logout', 16) ?> <?= e('nav.logout') ?></a>
+            <a href="<?= SITE_URL ?>/api/auth.php?action=admin_logout&amp;t=<?= csrfToken() ?>"><?= icon('logout', 16) ?> <?= e('nav.logout') ?></a>
         </div>
     </aside>
     <div class="admin-backdrop" id="adminBackdrop"></div>

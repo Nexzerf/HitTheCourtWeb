@@ -78,6 +78,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$booking['is_expired']) {
             ->execute([$bookingId, $method, $paidAmount, $upload['path'] ?? null, date('Y-m-d H:i:s')]);
         $pdo->prepare("UPDATE bookings SET payment_status = 'paid', payment_method = ?, expires_at = NULL WHERE booking_id = ?")
             ->execute([$method, $bookingId]);
+        // แต้มที่จะแลกต้องยังมีพออยู่จริง ณ ตอนจ่าย
+        if ((int) $booking['points_redeemed'] > 0) {
+            $pts = $pdo->prepare("SELECT points FROM users WHERE user_id = ? FOR UPDATE");
+            $pts->execute([$booking['user_id']]);
+            if ((int) $pts->fetchColumn() < (int) $booking['points_redeemed']) throw new Exception(t('pay.err_points'));
+        }
         // สะสมแต้ม +1 ต่อการจองที่จ่ายแล้ว และหักแต้มที่แลกไป
         $pdo->prepare("UPDATE users SET points = GREATEST(0, points + 1 - ?), total_bookings = total_bookings + 1 WHERE user_id = ?")
             ->execute([(int) $booking['points_redeemed'], $booking['user_id']]);

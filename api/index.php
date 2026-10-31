@@ -33,6 +33,10 @@ $blocked = ['config.php', 'config.local.php', 'config.local.example.php', 'api/i
 $script = null;
 if (isset($prettyRoutes[$path])) {
     $script = $prettyRoutes[$path];
+} elseif (preg_match('#^uploads/(.+)$#u', $path, $m)) {
+    // ไฟล์อัปโหลดเก่า: ต้องผ่านการตรวจสิทธิ์ใน media.php (ไม่เปิดเป็นไฟล์สาธารณะ)
+    $_GET['legacy'] = $m[1];
+    $script = 'api/media.php';
 } elseif (preg_match('#^media/(\d+)$#', $path, $m)) {
     // ไฟล์อัปโหลดที่เก็บในฐานข้อมูล
     $_GET['id'] = $m[1];

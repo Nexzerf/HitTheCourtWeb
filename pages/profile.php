@@ -7,7 +7,7 @@ requireLogin();
 $load = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
 $load->execute([$_SESSION['user_id']]);
 $user = $load->fetch();
-if (!$user) redirect('/api/auth.php?action=logout');
+if (!$user) redirect('/api/auth.php?action=logout&t=' . csrfToken());
 
 $errors = [];
 $success = null;

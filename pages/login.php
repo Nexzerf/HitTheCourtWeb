@@ -14,17 +14,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($username === '' || $password === '') {
         $error = t('auth.err_fill_all');
     } else {
+        $throttle = loginThrottleKey('user', $username);
+        if (loginIsLocked($throttle)) {
+            $error = t('auth.err_locked');
+        } else {
         $stmt = $pdo->prepare("SELECT * FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)");
         $stmt->execute([$username, $username]);
         $user = $stmt->fetch();
         if ($user && password_verify($password, $user['password'])) {
+            loginClearFailures($throttle);
             session_regenerate_id(true); // กัน session fixation
             $_SESSION['user_id'] = $user['user_id'];
             $_SESSION['username'] = $user['username'];
             $_SESSION['is_member'] = $user['is_member'];
             redirect($next);
         }
+        loginRecordFailure($throttle);
         $error = t('auth.err_invalid');
+        }
     }
 }
 

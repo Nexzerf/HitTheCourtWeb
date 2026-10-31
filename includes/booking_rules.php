@@ -117,7 +117,8 @@ function quoteBooking(PDO $pdo, array $user, int $sportId, array $input, ?int $i
     $today = date('Y-m-d');
     $advanceDays = $isMember ? ADVANCE_DAYS_MEMBER : ADVANCE_DAYS_REGULAR;
     $maxDate = date('Y-m-d', strtotime("+{$advanceDays} days"));
-    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || $date < $today) {
+    $validDate = preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $date, $dm) && checkdate((int) $dm[2], (int) $dm[3], (int) $dm[1]);
+    if (!$validDate || $date < $today) {
         $errors[] = t('err.invalid_date');
     } elseif ($date > $maxDate) {
         $errors[] = t('err.advance_limit', ['days' => $advanceDays]);
@@ -180,8 +181,9 @@ function quoteBooking(PDO $pdo, array $user, int $sportId, array $input, ?int $i
         if ($day === 1 || $day === 16) $discountOptions[] = ['percent' => 30, 'label' => t('discount.day_1_16')];
         if ($longestRun >= 3)         $discountOptions[] = ['percent' => 20, 'label' => t('discount.consecutive')];
 
+        // นับทั้งการจองที่จ่ายแล้ว และที่รอจ่ายอยู่ (กันจองค้างไว้หลายรายการเพื่อรับส่วนลดครั้งแรกซ้ำ)
         $first = $pdo->prepare("SELECT COUNT(*) FROM bookings b JOIN courts c ON c.court_id = b.court_id
-                                WHERE b.user_id = ? AND c.sport_id = ? AND b.payment_status = 'paid' AND b.booking_id <> ?");
+                                WHERE b.user_id = ? AND c.sport_id = ? AND b.booking_id <> ? AND " . activeBookingSql('b'));
         $first->execute([$user['user_id'], $sportId, $ignoreBookingId ?? 0]);
         if ((int) $first->fetchColumn() === 0) $discountOptions[] = ['percent' => 10, 'label' => t('discount.first_booking')];
     }
@@ -190,7 +192,8 @@ function quoteBooking(PDO $pdo, array $user, int $sportId, array $input, ?int $i
     $discountAmount = $discount ? round($courtFee * $discount['percent'] / 100, 2) : 0.0;
 
     // แลกแต้ม: ค่าสนามฟรี 1 รอบ
-    $points = (int) ($user['points'] ?? 0);
+    // แต้มที่ใช้ได้ = แต้มที่มี − แต้มที่ผูกไว้กับการจองอื่นที่ยังรอจ่าย (กันแลกแต้มเดียวกันหลายครั้ง)
+    $points = availablePoints($pdo, $user, $ignoreBookingId);
     $canUsePoints = $isMember && $points >= POINTS_FOR_FREE_ROUND && $rounds > 0;
     // keep_points: ตอนแก้ไขการจองที่เคยแลกแต้มไว้แล้ว ยังได้ส่วนลดเดิม (ไม่หักแต้มเพิ่ม)
     $usePoints = ($canUsePoints && !empty($input['use_points'])) || (!empty($input['keep_points']) && $rounds > 0);
@@ -346,4 +349,30 @@ function bookingIsEditable(array $booking): bool {
 function bookingHasStarted(array $booking, int $marginSeconds = 0): bool {
     $first = $booking['slots'][0]['start_time'] ?? '23:59:59';
     return $booking['booking_date'] . ' ' . $first <= date('Y-m-d H:i:s', time() + $marginSeconds);
+}
+
+/**
+ * ปรับแต้มเมื่อสถานะการจองเปลี่ยน: การจองที่ "จ่ายแล้วและไม่ถูกยกเลิก" นับเป็น +1 แต้ม −แต้มที่แลก
+ * $prev คือแถวเดิม (payment_status, booking_status, user_id, points_redeemed)
+ */
+function adjustBookingPoints(PDO $pdo, array $prev, string $newPay, string $newStatus): void {
+    $was = $prev['payment_status'] === 'paid' && $prev['booking_status'] !== 'cancelled';
+    $now = $newPay === 'paid' && !in_array($newStatus, ['cancelled', 'deleted'], true);
+    if ($was === $now) return;
+    $redeemed = (int) $prev['points_redeemed'];
+    if ($now) {
+        $pdo->prepare("UPDATE users SET points = GREATEST(0, points + 1 - ?), total_bookings = total_bookings + 1 WHERE user_id = ?")
+            ->execute([$redeemed, $prev['user_id']]);
+    } else {
+        $pdo->prepare("UPDATE users SET points = GREATEST(0, points - 1 + ?), total_bookings = GREATEST(0, total_bookings - 1) WHERE user_id = ?")
+            ->execute([$redeemed, $prev['user_id']]);
+    }
+}
+
+/** แต้มที่ใช้แลกได้จริง = แต้มที่มี − แต้มที่ผูกไว้กับการจองอื่นที่ยังรอจ่าย */
+function availablePoints(PDO $pdo, array $user, ?int $ignoreBookingId = null): int {
+    $reserved = $pdo->prepare("SELECT COALESCE(SUM(b.points_redeemed), 0) FROM bookings b
+                               WHERE b.user_id = ? AND b.payment_status = 'pending' AND b.booking_id <> ? AND " . activeBookingSql('b'));
+    $reserved->execute([$user['user_id'] ?? 0, $ignoreBookingId ?? 0]);
+    return max(0, (int) ($user['points'] ?? 0) - (int) $reserved->fetchColumn());
 }

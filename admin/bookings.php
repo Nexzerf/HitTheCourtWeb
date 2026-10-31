@@ -15,7 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $pay = in_array($_POST['payment_status'] ?? '', ['pending', 'paid', 'failed', 'refunded'], true) ? $_POST['payment_status'] : null;
         $status = in_array($_POST['booking_status'] ?? '', ['active', 'cancelled', 'completed'], true) ? $_POST['booking_status'] : null;
         $notes = trim($_POST['notes'] ?? '');
-        $before = $pdo->prepare("SELECT payment_status, user_id FROM bookings WHERE booking_id = ?");
+        $before = $pdo->prepare("SELECT payment_status, booking_status, user_id, points_redeemed, payment_method, total_price FROM bookings WHERE booking_id = ?");
         $before->execute([$id]);
         $prev = $before->fetch();
         if ($prev && $pay && $status) {
@@ -23,21 +23,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pdo->prepare("UPDATE bookings SET payment_status = ?, booking_status = ?, notes = ? WHERE booking_id = ?")
                 ->execute([$pay, $status, $notes ?: null, $id]);
             if ($pay === 'paid') $pdo->prepare("UPDATE bookings SET expires_at = NULL WHERE booking_id = ?")->execute([$id]);
-            // แอดมินยืนยันการจ่ายเงินเอง: บันทึกการชำระเงินและให้แต้มเหมือนจ่ายผ่านเว็บ
+            // แอดมินยืนยันการจ่ายเงินเอง: บันทึกการชำระเงินเหมือนจ่ายผ่านเว็บ
             if ($prev['payment_status'] !== 'paid' && $pay === 'paid') {
-                $bk = $pdo->prepare("SELECT payment_method, total_price, points_redeemed, user_id FROM bookings WHERE booking_id = ?");
-                $bk->execute([$id]);
-                $bk = $bk->fetch();
                 $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, payment_status, verified_by, verified_at) VALUES (?, ?, ?, 'verified', ?, ?)")
-                    ->execute([$id, $bk['payment_method'] ?: 'promptpay', $bk['total_price'], (int) $_SESSION['admin_id'], date('Y-m-d H:i:s')]);
-                $pdo->prepare("UPDATE users SET points = GREATEST(0, points + 1 - ?), total_bookings = total_bookings + 1 WHERE user_id = ?")
-                    ->execute([(int) $bk['points_redeemed'], $bk['user_id']]);
+                    ->execute([$id, $prev['payment_method'] ?: 'promptpay', $prev['total_price'], (int) $_SESSION['admin_id'], date('Y-m-d H:i:s')]);
             }
+            // แต้ม: การจองที่ "จ่ายแล้วและไม่ถูกยกเลิก" ได้ +1 แต้ม (และหักแต้มที่แลก)
+            // ถ้าสถานะเปลี่ยนเข้า/ออกจากกลุ่มนี้ ให้ปรับแต้มกลับให้ถูกต้อง
+            adjustBookingPoints($pdo, $prev, $pay, $status);
             $pdo->commit();
             $_SESSION['flash_success'] = t('admin.booking_updated');
         }
     } elseif ($action === 'delete' && $id) {
         $pdo->beginTransaction();
+        $before = $pdo->prepare("SELECT payment_status, booking_status, user_id, points_redeemed FROM bookings WHERE booking_id = ?");
+        $before->execute([$id]);
+        if ($prev = $before->fetch()) adjustBookingPoints($pdo, $prev, 'deleted', 'deleted');
         foreach (['payments', 'booking_equipment', 'booking_slots', 'bookings'] as $table) {
             $pdo->prepare("DELETE FROM $table WHERE booking_id = ?")->execute([$id]);
         }

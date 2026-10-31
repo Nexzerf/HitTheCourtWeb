@@ -192,3 +192,4 @@
 .card-head:has(> .meta) { flex-wrap: wrap; }
 @media (max-width: 640px) { .kpis { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); } }
 .dash-grid { align-items: start; }
+.admin-side-foot a.is-active { background: #1E293B; color: #fff !important; }
