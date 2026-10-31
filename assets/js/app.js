@@ -13,6 +13,21 @@
         });
     });
 
+    function shrinkImage(file, max, done) {
+        var img = new Image(), url = URL.createObjectURL(file);
+        img.onload = function () {
+            var scale = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+            var c = document.createElement('canvas');
+            c.width = Math.round(img.naturalWidth * scale); c.height = Math.round(img.naturalHeight * scale);
+            var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+            ctx.drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            c.toBlob(done, 'image/jpeg', 0.85);
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); done(null); };
+        img.src = url;
+    }
+
     // ---------- ช่องอัปโหลด: แสดงชื่อไฟล์และรูปตัวอย่าง ----------
     document.querySelectorAll('.upload').forEach(function (zone) {
         var input = zone.querySelector('input[type=file]');
@@ -22,6 +37,20 @@
         ['dragleave', 'drop'].forEach(function (ev) { zone.addEventListener(ev, function () { zone.classList.remove('is-drag'); }); });
         input.addEventListener('change', function () {
             var file = input.files && input.files[0];
+            // รูปจากมือถือมักใหญ่เกิน 4 MB หรือเป็นชนิดแปลก ๆ -> ย่อเป็น JPEG ก่อนส่ง
+            if (file && input.hasAttribute('data-compress') && !input._compressed && file.type.indexOf('image/') === 0
+                && (file.size > 1500000 || !/^image\/(jpeg|png)$/.test(file.type)) && window.DataTransfer) {
+                shrinkImage(file, 1600, function (blob) {
+                    if (!blob) return;
+                    var dt = new DataTransfer();
+                    dt.items.add(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }));
+                    input.files = dt.files;
+                    input._compressed = true;
+                    input.dispatchEvent(new Event('change'));
+                    input._compressed = false;
+                });
+                return;
+            }
             zone.classList.toggle('has-file', !!file);
             if (label) label.textContent = file ? file.name : label.dataset.empty;
             var preview = zone.querySelector('.upload-preview');

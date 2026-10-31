@@ -42,6 +42,29 @@ ini_set('display_errors', $debug ? 1 : 0);
 ini_set('display_startup_errors', $debug ? 1 : 0);
 error_reporting(E_ALL);
 
+// ถ้าเกิด Error ร้ายแรงที่ไม่มีใครดักไว้ ให้แสดงหน้าแจ้งเตือนแทนหน้าขาวว่าง ๆ
+set_exception_handler(function (Throwable $e) {
+    error_log('Uncaught: ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) http_response_code(500);
+    if (!headers_sent() || ob_get_level() > 0) while (ob_get_level() > 0) ob_end_clean();
+    echo '<!DOCTYPE html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+       . '<title>Error</title><div style="font-family:sans-serif;max-width:480px;margin:15vh auto;padding:24px;text-align:center">'
+       . '<h1 style="font-size:1.4rem">เกิดข้อผิดพลาด / Something went wrong</h1>'
+       . '<p style="color:#64748B">กรุณาลองใหม่อีกครั้ง / Please try again.</p>'
+       . '<p><a href="javascript:history.back()" style="color:#2563EB">← กลับ / Back</a></p></div>';
+});
+register_shutdown_function(function () {
+    $err = error_get_last();
+    if ($err && in_array($err['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        error_log('Fatal: ' . $err['message'] . ' @ ' . $err['file'] . ':' . $err['line']);
+        if (!headers_sent()) {
+            http_response_code(500);
+            echo '<!DOCTYPE html><meta charset="utf-8"><div style="font-family:sans-serif;max-width:480px;margin:15vh auto;text-align:center">'
+               . '<h1 style="font-size:1.4rem">เกิดข้อผิดพลาด / Something went wrong</h1><p><a href="javascript:history.back()">← กลับ / Back</a></p></div>';
+        }
+    }
+});
+
 // ============================================
 // DATABASE CONFIGURATION
 // ============================================
@@ -227,16 +250,43 @@ require_once __DIR__ . '/includes/booking_rules.php';
  * คืนค่า ['path' => ที่อยู่สำหรับบันทึกลงฐานข้อมูล, 'local' => ไฟล์บนเครื่องที่ใช้ได้ระหว่าง Request นี้]
  * หรือ null ถ้าบันทึกไม่สำเร็จ
  */
-function saveUploadedFile(array $file, string $folder, string $filename): ?array {
+/**
+ * ตรวจไฟล์รูปที่อัปโหลด: ต้องเป็นรูปภาพจริง (JPG / PNG / WEBP / GIF) และไม่เกิน 4 MB
+ * คืนค่า ['mime' => ..., 'ext' => ...] หรือโยน Exception พร้อมข้อความที่แสดงให้ผู้ใช้ได้
+ * ใช้ getimagesize() ซึ่งมีในทุกเครื่อง (ไม่ต้องพึ่งส่วนเสริม fileinfo ที่บางโฮสต์ไม่มี)
+ */
+function validateImageUpload(?array $file): array {
+    if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE || ($file['name'] ?? '') === '') {
+        throw new Exception(t('pay.err_slip_required'));
+    }
+    if (in_array($file['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true)) throw new Exception(t('pay.err_size'));
+    if ($file['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'])) throw new Exception(t('pay.err_upload'));
+    if ($file['size'] > 4 * 1024 * 1024) throw new Exception(t('pay.err_size'));
+    $info = @getimagesize($file['tmp_name']);
+    $types = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'image/bmp' => 'bmp'];
+    if (!$info) {
+        // รูป HEIC จาก iPhone: getimagesize อ่านไม่ได้ ดูจากหัวไฟล์แทน
+        $head = (string) @file_get_contents($file['tmp_name'], false, null, 0, 32);
+        if (preg_match('/ftyp(heic|heix|hevc|mif1|msf1)/', $head)) return ['mime' => 'image/heic', 'ext' => 'heic'];
+    }
+    if (!$info || !isset($types[$info['mime']])) throw new Exception(t('pay.err_type'));
+    return ['mime' => $info['mime'], 'ext' => $types[$info['mime']]];
+}
+
+function saveUploadedFile(array $file, string $folder, string $filename, ?string $mime = null): ?array {
     global $pdo;
 
     if (UPLOAD_DRIVER === 'database') {
         $localFile = sys_get_temp_dir() . '/' . uniqid() . '_' . $filename;
         if (!move_uploaded_file($file['tmp_name'], $localFile)) return null;
+        if (!$mime) {
+            $info = @getimagesize($localFile);
+            $mime = $info['mime'] ?? 'application/octet-stream';
+        }
 
         $stmt = $pdo->prepare("INSERT INTO uploaded_files (folder, filename, mime_type, data) VALUES (?, ?, ?, ?)");
         // เก็บเป็น base64 (ข้อความ) ใช้ได้เหมือนกันทั้ง MySQL และ PostgreSQL
-        $stmt->execute([$folder, $filename, mime_content_type($localFile) ?: 'application/octet-stream', base64_encode(file_get_contents($localFile))]);
+        $stmt->execute([$folder, $filename, $mime, base64_encode(file_get_contents($localFile))]);
         return ['path' => 'media/' . $pdo->lastInsertId(), 'local' => $localFile];
     }
 

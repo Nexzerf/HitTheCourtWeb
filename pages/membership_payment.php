@@ -14,8 +14,12 @@ $stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
 $stmt->execute([$_SESSION['user_id']]);
 $user = $stmt->fetch();
 
-// ต่ออายุ: เริ่มนับต่อจากวันหมดอายุเดิม / สมัครใหม่: เริ่มวันนี้
-$startDate = isActiveMember($user) ? date('Y-m-d', strtotime($user['member_expire'] . ' +1 day')) : date('Y-m-d');
+// สมาชิกที่ยังไม่หมดอายุ สมัครซ้ำไม่ได้ ต้องรอให้หมดอายุก่อน
+if (isActiveMember($user)) {
+    $_SESSION['flash_error'] = t('member.err_active', ['date' => formatDateLocalized($user['member_expire'])]);
+    redirect('/membership');
+}
+$startDate = date('Y-m-d');
 $endDate = date('Y-m-d', strtotime($startDate . ' +' . (int) $plan['duration_months'] . ' months -1 day'));
 $amount = (float) $plan['price'];
 
@@ -42,17 +46,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL)) $errors[] = t('err.email_invalid');
     if (!preg_match('/^[0-9+\-\s]{9,20}$/', $old['phone'])) $errors[] = t('err.phone_invalid');
 
-    $hasSlip = !empty($_FILES['slip']['name']);
-    if (PAYMENT_MODE !== 'demo' && !$hasSlip) $errors[] = t('pay.err_slip_required');
-
     try {
         $upload = null;
-        if (!$errors && $hasSlip) {
-            $file = $_FILES['slip'];
-            $mime = $file['error'] === UPLOAD_ERR_OK ? mime_content_type($file['tmp_name']) : '';
-            if (!in_array($mime, ['image/jpeg', 'image/png'], true)) throw new Exception(t('pay.err_type'));
-            if ($file['size'] > 4 * 1024 * 1024) throw new Exception(t('pay.err_size'));
-            $upload = saveUploadedFile($file, 'slips', 'mem_' . $user['user_id'] . '_' . time() . ($mime === 'image/png' ? '.png' : '.jpg'));
+        if (!$errors) {
+            // ต้องแนบรูปสลิป (โหมดสาธิต: รูปอะไรก็ได้ ขอแค่เป็นไฟล์รูปภาพ)
+            $img = validateImageUpload($_FILES['slip'] ?? null);
+            $upload = saveUploadedFile($_FILES['slip'], 'slips', 'mem_' . $user['user_id'] . '_' . time() . '.' . $img['ext'], $img['mime']);
             if (!$upload) throw new Exception(t('pay.err_upload'));
         }
         if (!$errors && PAYMENT_MODE === 'thunder') {
@@ -64,6 +63,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$errors) {
             $pdo->beginTransaction();
+            // ล็อกแถวผู้ใช้ แล้วเช็คซ้ำ กันกดสมัครซ้อนกันสองครั้ง
+            $lock = $pdo->prepare("SELECT * FROM users WHERE user_id = ? FOR UPDATE");
+            $lock->execute([$user['user_id']]);
+            if (isActiveMember($lock->fetch())) {
+                $pdo->rollBack();
+                redirect('/membership');
+            }
             $pdo->prepare("INSERT INTO user_membership (user_id, plan_id, first_name, last_name, email, phone, start_date, end_date, total_price, payment_method, payment_status, slip_image)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?)")
                 ->execute([$user['user_id'], $plan['plan_id'], $old['first_name'], $old['last_name'], $old['email'], $old['phone'],
@@ -77,9 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['flash_success'] = t('member.success', ['date' => formatDateLocalized($endDate)]);
             redirect('/membership');
         }
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        $errors[] = $e->getMessage();
+        if (!$e instanceof Exception || $e instanceof PDOException) { error_log('Membership failed: ' . $e->getMessage()); $errors[] = t('err.generic'); }
+        else $errors[] = $e->getMessage();
     }
 }
 
@@ -91,7 +98,7 @@ include '../includes/head.php';
     <div class="wrap">
         <a href="<?= SITE_URL ?>/membership" class="back-link"><?= icon('arrow-left', 16) ?> <?= e('nav.membership') ?></a>
         <header class="page-head">
-            <span class="eyebrow"><?= icon('crown', 14) ?> <?= isActiveMember($user) ? e('member.renew') : e('member.join') ?></span>
+            <span class="eyebrow"><?= icon('crown', 14) ?> <?= e('member.join') ?></span>
             <h1><?= e('member.pay_title') ?></h1>
             <p><?= PAYMENT_MODE === 'demo' ? e('pay.demo_note') : e('pay.intro') ?></p>
         </header>
@@ -144,9 +151,9 @@ include '../includes/head.php';
                             </dl>
                         </div>
 
-                        <p class="label mt-3 mb-1"><?= e('pay.upload_title') ?> <?php if (PAYMENT_MODE === 'demo'): ?><span class="opt">(<?= e('common.optional') ?>)</span><?php endif; ?></p>
+                        <p class="label mt-3 mb-1"><?= e('pay.upload_title') ?></p>
                         <label class="upload">
-                            <input type="file" name="slip" accept="image/jpeg,image/png" <?= PAYMENT_MODE !== 'demo' ? 'required' : '' ?>>
+                            <input type="file" name="slip" accept="image/*" data-compress required>
                             <?= icon('upload', 28) ?>
                             <strong data-upload-label data-empty="<?= e('pay.upload_cta') ?>"><?= e('pay.upload_cta') ?></strong>
                             <span class="small"><?= e('pay.upload_hint') ?></span>

@@ -24,6 +24,9 @@ include '../includes/head.php';
         <?php if (!empty($_SESSION['flash_success'])): ?>
             <div class="alert alert-success mb-3" role="status"><?= icon('check-circle') ?><div><?= htmlspecialchars($_SESSION['flash_success']) ?></div></div>
         <?php unset($_SESSION['flash_success']); endif; ?>
+        <?php if (!empty($_SESSION['flash_error'])): ?>
+            <div class="alert alert-danger mb-3" role="alert"><?= icon('alert') ?><div><?= htmlspecialchars(implode(' ', (array) $_SESSION['flash_error'])) ?></div></div>
+        <?php unset($_SESSION['flash_error']); endif; ?>
 
         <section class="member-hero">
             <div>
@@ -36,7 +39,7 @@ include '../includes/head.php';
                 <div class="plan-price"><?= number_format((float) ($plan['price'] ?? 499)) ?><span> <?= e('currency') ?> / <?= e('member.months', ['n' => (int) ($plan['duration_months'] ?? 3)]) ?></span></div>
                 <?php if ($isMember): ?>
                     <p class="plan-status"><?= icon('check-circle', 16) ?> <?= e('profile.member_until', ['date' => formatDateLocalized($user['member_expire'])]) ?></p>
-                    <a href="<?= SITE_URL ?>/membership_payment" class="btn btn-outline btn-block plan-btn"><?= e('member.renew') ?></a>
+                    <span class="btn btn-outline btn-block plan-btn is-disabled" aria-disabled="true"><?= icon('lock', 16) ?> <?= e('member.renew_after', ['date' => formatDateLocalized($user['member_expire'])]) ?></span>
                 <?php else: ?>
                     <a href="<?= isLoggedIn() ? SITE_URL . '/membership_payment' : SITE_URL . '/login?next=' . urlencode('/membership_payment') ?>" class="btn btn-primary btn-lg btn-block plan-btn"><?= e('member.join') ?> <?= icon('arrow-right', 18) ?></a>
                 <?php endif; ?>

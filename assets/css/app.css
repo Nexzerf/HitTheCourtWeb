@@ -339,3 +339,7 @@ body.app.lang-th { line-height: 1.7; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+.inline-form { display: inline-flex; margin: 0; }
+.input.is-invalid, .select.is-invalid, .textarea.is-invalid { border-color: var(--c-danger); background: var(--c-danger-soft); }
+.field-error { color: var(--c-danger); font-size: .8rem; font-weight: 500; }
+.field + .form-grid, .form-grid + .field, [data-for] + .field, .field + [data-for] { margin-top: 14px; }

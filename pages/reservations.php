@@ -4,6 +4,16 @@
 require_once '../config.php';
 requireLogin();
 
+// ยกเลิกการจองที่ยังไม่ได้จ่ายเงิน (ปล่อยสนามคืนทันที)
+if (($_POST['action'] ?? '') === 'cancel_unpaid') {
+    $id = intval($_POST['booking_id'] ?? 0);
+    $pdo->prepare("UPDATE bookings SET booking_status = 'cancelled', expires_at = NULL
+                   WHERE booking_id = ? AND user_id = ? AND payment_status = 'pending' AND booking_status = 'active'")
+        ->execute([$id, $_SESSION['user_id']]);
+    $_SESSION['flash_success'] = t('res.unpaid_cancelled');
+    redirect('/reservations');
+}
+
 $stmt = $pdo->prepare("SELECT booking_id FROM bookings WHERE user_id = ? ORDER BY booking_date DESC, booking_id DESC");
 $stmt->execute([$_SESSION['user_id']]);
 $groups = ['upcoming' => [], 'pending' => [], 'history' => []];
@@ -12,7 +22,8 @@ foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
     $b = loadBookingDetails($pdo, (int) $id);
     if (!$b) continue;
     if ($b['booking_status'] === 'active' && $b['payment_status'] === 'paid' && $b['booking_date'] >= $today) $groups['upcoming'][] = $b;
-    elseif ($b['booking_status'] === 'active' && $b['payment_status'] === 'pending' && !$b['is_expired']) $groups['pending'][] = $b;
+    // ยังไม่จ่ายและยังไม่ถึงเวลาเล่น = รอชำระเงิน (ถึงเวลาล็อกสนาม 15 นาทีจะหมดแล้ว ก็ยังกดจ่ายต่อได้ถ้าช่วงเวลายังว่าง)
+    elseif ($b['booking_status'] === 'active' && $b['payment_status'] === 'pending' && !bookingHasStarted($b)) $groups['pending'][] = $b;
     else $groups['history'][] = $b;
 }
 // งานที่ใกล้ถึงก่อนอยู่บนสุด
@@ -58,7 +69,7 @@ include '../includes/head.php';
                     </div>
                 <?php else: ?>
                 <div class="res-list">
-                    <?php foreach ($list as $b): [$statusText, $statusClass] = bookingStatusBadge($b); ?>
+                    <?php foreach ($list as $b): [$statusText, $statusClass] = $tab === 'pending' ? [t('status.awaiting_payment'), 'badge-warning'] : bookingStatusBadge($b); ?>
                     <article class="card res-card">
                         <div class="res-date">
                             <span class="res-day"><?= date('j', strtotime($b['booking_date'])) ?></span>
@@ -104,6 +115,13 @@ include '../includes/head.php';
                                 <?php endif; ?>
                                 <?php if (bookingIsEditable($b)): ?>
                                     <a class="btn btn-outline btn-sm" href="<?= SITE_URL ?>/booking?edit=<?= $b['booking_id'] ?>"><?= icon('edit', 16) ?> <?= e('res.edit') ?></a>
+                                <?php endif; ?>
+                                <?php if ($tab === 'pending'): ?>
+                                    <form method="POST" class="inline-form" data-confirm="<?= e('res.cancel_unpaid_confirm') ?>">
+                                        <input type="hidden" name="action" value="cancel_unpaid">
+                                        <input type="hidden" name="booking_id" value="<?= (int) $b['booking_id'] ?>">
+                                        <button type="submit" class="btn btn-danger-outline btn-sm"><?= icon('trash', 16) ?> <?= e('res.cancel_unpaid') ?></button>
+                                    </form>
                                 <?php endif; ?>
                                 <?php if ($tab === 'upcoming'): ?>
                                     <a class="btn btn-ghost btn-sm" href="<?= SITE_URL ?>/payment_success?booking=<?= urlencode($b['booking_code']) ?>"><?= icon('receipt', 16) ?> <?= e('res.receipt') ?></a>

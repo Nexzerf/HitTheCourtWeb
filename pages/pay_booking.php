@@ -42,18 +42,11 @@ $method = $method === 'bank_transfer' ? 'bank_transfer' : 'promptpay';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$booking['is_expired']) {
     try {
-        $hasSlip = !empty($_FILES['slip']['name']);
-        $needSlip = PAYMENT_MODE !== 'demo' && $amount > 0;
-        if ($needSlip && !$hasSlip) throw new Exception(t('pay.err_slip_required'));
-
+        // ต้องแนบรูปสลิปทุกครั้ง (โหมดสาธิต: เป็นรูปอะไรก็ได้ ขอแค่เป็นไฟล์รูปภาพ)
         $upload = null;
-        if ($hasSlip) {
-            $file = $_FILES['slip'];
-            if ($file['error'] !== UPLOAD_ERR_OK) throw new Exception(t('pay.err_upload'));
-            $mime = mime_content_type($file['tmp_name']);
-            if (!in_array($mime, ['image/jpeg', 'image/png'], true)) throw new Exception(t('pay.err_type'));
-            if ($file['size'] > 4 * 1024 * 1024) throw new Exception(t('pay.err_size'));
-            $upload = saveUploadedFile($file, 'slips', 'bk_' . $bookingId . '_' . time() . ($mime === 'image/png' ? '.png' : '.jpg'));
+        if ($amount > 0) {
+            $img = validateImageUpload($_FILES['slip'] ?? null);
+            $upload = saveUploadedFile($_FILES['slip'], 'slips', 'bk_' . $bookingId . '_' . time() . '.' . $img['ext'], $img['mime']);
             if (!$upload) throw new Exception(t('pay.err_upload'));
         }
 
@@ -90,9 +83,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$booking['is_expired']) {
         $pdo->commit();
 
         redirect('/payment_success?booking=' . urlencode($booking['booking_code']));
-    } catch (Exception $e) {
+    } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
-        $errors[] = $e->getMessage();
+        if (!$e instanceof Exception || $e instanceof PDOException) { error_log('Pay failed: ' . $e->getMessage()); $errors[] = t('err.generic'); }
+        else $errors[] = $e->getMessage();
     }
 }
 
@@ -165,11 +159,10 @@ include '../includes/head.php';
                 </section>
 
                 <section class="card">
-                    <div class="card-head"><h2><?= icon('upload', 18) ?> <?= e('pay.upload_title') ?>
-                        <?php if (PAYMENT_MODE === 'demo'): ?><span class="opt muted small">(<?= e('common.optional') ?>)</span><?php endif; ?></h2></div>
+                    <div class="card-head"><h2><?= icon('upload', 18) ?> <?= e('pay.upload_title') ?></h2></div>
                     <div class="card-body">
                         <label class="upload">
-                            <input type="file" name="slip" accept="image/jpeg,image/png" <?= PAYMENT_MODE !== 'demo' && $amount > 0 ? 'required' : '' ?>>
+                            <input type="file" name="slip" accept="image/*" data-compress <?= $amount > 0 ? 'required' : '' ?>>
                             <?= icon('upload', 28) ?>
                             <strong data-upload-label data-empty="<?= e('pay.upload_cta') ?>"><?= e('pay.upload_cta') ?></strong>
                             <span class="small"><?= e('pay.upload_hint') ?></span>

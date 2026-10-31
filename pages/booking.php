@@ -269,17 +269,6 @@ include '../includes/head.php';
                             </div>
                         </div>
 
-                        <p class="label mt-3 mb-1"><?= e('payment.method') ?></p>
-                        <div class="choices">
-                            <label class="choice">
-                                <input type="radio" name="payment_method" value="promptpay" <?= ($editing['payment_method'] ?? 'promptpay') !== 'bank_transfer' ? 'checked' : '' ?>>
-                                <span class="choice-box"><span class="choice-icon"><?= icon('qr') ?></span><span><strong><?= e('payment.promptpay') ?></strong><small><?= e('payment.promptpay_desc') ?></small></span></span>
-                            </label>
-                            <label class="choice">
-                                <input type="radio" name="payment_method" value="bank_transfer" <?= ($editing['payment_method'] ?? '') === 'bank_transfer' ? 'checked' : '' ?>>
-                                <span class="choice-box"><span class="choice-icon"><?= icon('bank') ?></span><span><strong><?= e('payment.bank') ?></strong><small><?= e('payment.bank_desc') ?></small></span></span>
-                            </label>
-                        </div>
                     </div>
                 </section>
             </div>

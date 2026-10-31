@@ -18,7 +18,7 @@ $firstName = trim($_POST['first_name'] ?? '');
 $lastName  = trim($_POST['last_name'] ?? '');
 $phone     = trim($_POST['phone'] ?? '');
 $email     = trim($_POST['email'] ?? '');
-$method    = ($_POST['payment_method'] ?? '') === 'bank_transfer' ? 'bank_transfer' : 'promptpay';
+$method    = 'promptpay'; // เลือกวิธีจ่ายจริงที่หน้าชำระเงิน
 
 $fail = function (array $errors) use ($backUrl) {
     $_SESSION['flash_error'] = $errors;
@@ -82,7 +82,7 @@ try {
                 (int) $quote['sport']['duration_minutes'] * $quote['rounds'], $quote['court_fee'], $quote['equipment_total'],
                 $quote['discount_amount'] + $pointsDiscount,
                 $quote['discount'] ? $quote['discount']['label'] . ' ' . $quote['discount']['percent'] . '%' : null,
-                $isPaid ? $oldTotal : $newTotal, $method, $note, $isPaid ? null : holdExpiresAt(), $editId]);
+                $isPaid ? $oldTotal : $newTotal, $editing['payment_method'] ?: $method, $note, $isPaid ? null : holdExpiresAt(), $editId]);
 
         $pdo->prepare("DELETE FROM booking_slots WHERE booking_id = ?")->execute([$editId]);
         $slotStmt = $pdo->prepare("INSERT INTO booking_slots (booking_id, slot_id) VALUES (?, ?)");

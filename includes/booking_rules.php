@@ -336,10 +336,14 @@ function bookingPriceRows(array $booking): array {
     return $rows;
 }
 
-/** แก้ไขการจองได้ไหม: ยังไม่ยกเลิก, ยังไม่หมดเวลา และยังไม่ถึงวันเล่น (หรือวันนี้แต่ยังไม่เริ่ม) */
+/** แก้ไขการจองได้ไหม: เฉพาะการจองที่ยังไม่ได้จ่ายเงิน ยังไม่ยกเลิก และยังไม่ถึงเวลาเล่น (จ่ายแล้วแก้ไม่ได้ ต้องแจ้งยกเลิกแทน) */
 function bookingIsEditable(array $booking): bool {
-    if ($booking['booking_status'] !== 'active' || !in_array($booking['payment_status'], ['paid', 'pending'], true)) return false;
-    if ($booking['payment_status'] === 'pending' && !empty($booking['is_expired'])) return false;
+    if ($booking['booking_status'] !== 'active' || $booking['payment_status'] !== 'pending') return false;
+    return !bookingHasStarted($booking, 3600); // แก้ได้ก่อนเริ่มเล่นอย่างน้อย 1 ชม.
+}
+
+/** ถึงเวลาเล่นแล้วหรือยัง (บวกระยะเผื่อเป็นวินาทีได้) */
+function bookingHasStarted(array $booking, int $marginSeconds = 0): bool {
     $first = $booking['slots'][0]['start_time'] ?? '23:59:59';
-    return $booking['booking_date'] . ' ' . $first > date('Y-m-d H:i:s', time() + 3600); // แก้ได้ก่อนเริ่มเล่นอย่างน้อย 1 ชม.
+    return $booking['booking_date'] . ' ' . $first <= date('Y-m-d H:i:s', time() + $marginSeconds);
 }

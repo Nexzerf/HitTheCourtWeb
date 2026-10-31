@@ -76,7 +76,7 @@ class ThunderClient
         if (!file_exists($filePath)) throw new Exception("File not found.");
         
         // เตรียมไฟล์สำหรับอัปโหลดผ่าน cURL (ใช้ Class CURLFile)
-        $curlFile = new CURLFile($filePath, mime_content_type($filePath), basename($filePath));
+        $curlFile = new CURLFile($filePath, (@getimagesize($filePath)['mime'] ?? 'image/jpeg'), basename($filePath));
 
         $ch = curl_init();
         curl_setopt_array($ch, [
