@@ -4,6 +4,10 @@
    ===================================================== */
 
 html { -webkit-text-size-adjust: 100%; }
+/* ภาษาไทย: ใช้ฟอนต์ที่มีตัวอักษรไทยสวย ๆ (Inter / Space Grotesk ไม่มีตัวไทย) */
+html[lang="th"] body, html[lang="th"] button, html[lang="th"] input, html[lang="th"] select, html[lang="th"] textarea {
+    font-family: 'Inter', 'IBM Plex Sans Thai', system-ui, sans-serif;
+}
 img, svg, video { max-width: 100%; }
 img { height: auto; }
 

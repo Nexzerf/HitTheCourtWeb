@@ -1,0 +1,212 @@
+/* =====================================================
+   หน้าจองสนาม: แผนที่สนาม, ช่วงเวลา, อุปกรณ์, สรุปราคา
+   ===================================================== */
+.booking-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+.booking-head h1 { margin-bottom: 8px; }
+.member-pill { padding: 6px 12px; font-size: .8rem; }
+.step-no {
+    display: inline-grid; place-items: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--c-ink); color: #fff;
+    font-family: var(--font-body); font-size: .8rem; font-weight: 700;
+}
+
+/* ---------- Date strip ---------- */
+.date-strip {
+    display: grid;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(64px, 1fr);
+    gap: 8px;
+    overflow-x: auto;
+    padding: 2px 2px 6px;
+    scroll-snap-type: x mandatory;
+}
+.date-chip {
+    position: relative;
+    display: flex; flex-direction: column; align-items: center; gap: 0;
+    padding: 10px 6px;
+    border: 1.5px solid var(--c-border);
+    border-radius: 14px;
+    background: #fff;
+    color: var(--c-ink) !important;
+    text-decoration: none;
+    scroll-snap-align: start;
+    transition: border-color .15s, background .15s, transform .1s;
+}
+.date-chip:hover { border-color: #93C5FD; }
+.dc-day { color: var(--c-muted); font-size: .72rem; font-weight: 600; text-transform: uppercase; }
+.dc-date { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; line-height: 1.2; }
+.dc-month { color: var(--c-muted); font-size: .72rem; }
+.date-chip.is-active { border-color: var(--c-primary); background: var(--c-primary); color: #fff !important; box-shadow: 0 8px 20px rgba(37, 99, 235, .25); }
+.date-chip.is-active .dc-day, .date-chip.is-active .dc-month { color: rgba(255, 255, 255, .85); }
+.date-chip.is-locked { background: #F8FAFC; color: #94A3B8 !important; border-style: dashed; }
+.dc-lock { position: absolute; top: 4px; right: 4px; color: var(--c-gold); }
+.dc-deal {
+    position: absolute; top: -8px; left: 50%; transform: translateX(-50%);
+    padding: 1px 6px; border-radius: 999px;
+    background: var(--c-danger); color: #fff; font-size: .62rem; font-weight: 700;
+}
+
+/* ---------- Venue map ---------- */
+.map-legend { display: flex; gap: 12px; flex-wrap: wrap; color: var(--c-muted); font-size: .78rem; }
+.map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg { width: 12px; height: 12px; border-radius: 4px; display: inline-block; }
+.lg-free { background: #22C55E; }
+.lg-selected { background: var(--c-primary); }
+.lg-full { background: #94A3B8; }
+
+.venue {
+    --court-surface: #2F855A;
+    position: relative;
+    padding: 44px clamp(12px, 3vw, 28px) clamp(14px, 3vw, 28px);
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .07) 1px, transparent 0) 0 0 / 18px 18px,
+        linear-gradient(160deg, #1E293B, #0F172A);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .06);
+}
+.venue-badminton    { --court-surface: #15803D; }
+.venue-football     { --court-surface: #16A34A; }
+.venue-futsal       { --court-surface: #0E7490; }
+.venue-tennis       { --court-surface: #2563EB; }
+.venue-volleyball   { --court-surface: #EA580C; }
+.venue-basketball   { --court-surface: #B45309; }
+.venue-table-tennis { --court-surface: #1D4ED8; }
+
+.venue-label {
+    position: absolute; top: 14px; left: clamp(12px, 3vw, 28px);
+    display: inline-flex; align-items: center; gap: 6px;
+    color: rgba(255, 255, 255, .6); font-size: .72rem; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+}
+.venue-grid { display: grid; gap: clamp(10px, 2vw, 18px); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.venue-n6 .venue-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.venue-n8 .venue-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 640px) {
+    .venue-n6 .venue-grid, .venue-n8 .venue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.court-btn {
+    position: relative;
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+    box-shadow: 0 0 0 2px transparent, 0 10px 24px rgba(0, 0, 0, .35);
+}
+.court-drawing { display: block; width: 100%; height: auto; border-radius: 12px; }
+.court-surface { fill: var(--court-surface); }
+.court-floor { fill: #334155; }
+.court-btn:hover { transform: translateY(-3px); filter: brightness(1.08); }
+.court-btn:focus-visible { outline: 3px solid #93C5FD; outline-offset: 3px; }
+.court-btn.is-selected { box-shadow: 0 0 0 3px #60A5FA, 0 0 0 7px rgba(96, 165, 250, .3), 0 14px 30px rgba(0, 0, 0, .4); transform: translateY(-3px); }
+.court-btn.is-full { filter: grayscale(.9) brightness(.7); cursor: not-allowed; }
+.court-btn.is-full:hover { transform: none; }
+
+.court-tag, .court-free {
+    position: absolute;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: .72rem; font-weight: 700; line-height: 1.4;
+    white-space: nowrap;
+}
+.court-tag { top: 8px; left: 8px; background: rgba(15, 23, 42, .78); color: #fff; }
+.court-free { bottom: 8px; left: 8px; background: #22C55E; color: #052E16; }
+.court-btn.is-full .court-free { background: #CBD5E1; color: #334155; }
+.court-check {
+    position: absolute; top: 8px; right: 8px;
+    display: none; place-items: center;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: var(--c-primary); color: #fff;
+}
+.court-btn.is-selected .court-check { display: grid; }
+@media (max-width: 420px) {
+    .court-tag, .court-free { font-size: .64rem; padding: 2px 7px; }
+}
+
+/* ---------- Time slots ---------- */
+.slot-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr)); gap: 10px; }
+.slot { position: relative; display: block; cursor: pointer; }
+.slot input { position: absolute; opacity: 0; pointer-events: none; }
+.slot-box {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 10px 12px;
+    border: 1.5px solid var(--c-border);
+    border-radius: 12px;
+    background: #fff;
+    transition: border-color .15s, background .15s, box-shadow .15s;
+}
+.slot-round { color: var(--c-muted); font-size: .7rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.slot-time { color: var(--c-ink); font-family: var(--font-display); font-size: 1.02rem; font-weight: 700; }
+.slot-state { font-size: .75rem; font-weight: 600; color: var(--c-success); }
+.slot-free:hover .slot-box { border-color: #93C5FD; }
+.slot input:checked + .slot-box { border-color: var(--c-primary); background: var(--c-primary); box-shadow: 0 6px 16px rgba(37, 99, 235, .25); }
+.slot input:checked + .slot-box * { color: #fff; }
+.slot input:focus-visible + .slot-box { outline: 3px solid rgba(37, 99, 235, .35); outline-offset: 2px; }
+.slot-taken, .slot-past, .slot-closed { cursor: not-allowed; }
+.slot-taken .slot-box, .slot-past .slot-box, .slot-closed .slot-box { background: #F1F5F9; border-style: dashed; }
+.slot-taken .slot-time, .slot-past .slot-time, .slot-closed .slot-time { color: #94A3B8; text-decoration: line-through; }
+.slot-taken .slot-state { color: var(--c-danger); }
+.slot-past .slot-state, .slot-closed .slot-state { color: #94A3B8; }
+
+/* ---------- Equipment ---------- */
+.equip-list { list-style: none; margin: 0; padding: 0; }
+.equip { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--c-border); }
+.equip:first-child { padding-top: 0; }
+.equip:last-child { border-bottom: 0; padding-bottom: 0; }
+.equip-info { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; min-width: 0; }
+.equip-info strong { color: var(--c-ink); }
+.equip-price { color: var(--c-primary); font-weight: 600; font-size: .9rem; }
+.equip-fine {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 1px 8px; border-radius: 6px;
+    background: var(--c-danger-soft); color: var(--c-danger);
+    font-size: .76rem; font-weight: 600;
+}
+.qty { display: flex; align-items: center; border: 1.5px solid var(--c-border); border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+.qty-btn { display: grid; place-items: center; width: 40px; height: 42px; border: 0; background: #F8FAFC; color: var(--c-ink); cursor: pointer; }
+.qty-btn:hover { background: #E2E8F0; }
+.qty-btn:disabled { color: #CBD5E1; cursor: not-allowed; }
+.qty-input {
+    width: 48px; height: 42px; border: 0; text-align: center;
+    font: inherit; font-weight: 700; font-size: 1rem; color: var(--c-ink);
+    -moz-appearance: textfield;
+}
+.qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qty-input:focus { outline: none; background: var(--c-primary-soft); }
+
+/* ---------- Summary ---------- */
+.summary-card .card-head h2 { font-size: 1.05rem; }
+.sum-title { color: var(--c-ink); font-weight: 700; margin-bottom: 4px; }
+.sum-sub { color: var(--c-muted); font-size: .85rem; margin-bottom: 10px; }
+.sum-errors { margin-top: 12px; }
+.points-toggle {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 14px; padding: 12px;
+    border: 1.5px dashed #FCD34D; border-radius: 12px;
+    background: #FFFBEB; color: #78350F; font-size: .88rem; cursor: pointer;
+}
+.points-toggle span { display: inline-flex; align-items: center; gap: 6px; }
+.points-toggle.is-disabled { opacity: .6; cursor: not-allowed; }
+.points-toggle input { width: 18px; height: 18px; accent-color: var(--c-primary); }
+
+/* ---------- Mobile sticky bar ---------- */
+.mobile-bar { display: none; }
+@media (max-width: 1024px) {
+    .mobile-bar:not([hidden]) {
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 900;
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 12px var(--gutter) calc(12px + env(safe-area-inset-bottom));
+        background: rgba(255, 255, 255, .97);
+        border-top: 1px solid var(--c-border);
+        box-shadow: 0 -8px 24px rgba(15, 23, 42, .08);
+    }
+    .mobile-bar div { display: flex; flex-direction: column; line-height: 1.2; }
+    .mobile-bar strong { color: var(--c-primary); font-family: var(--font-display); font-size: 1.25rem; }
+    .booking-page { padding-bottom: 120px; }
+}

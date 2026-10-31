@@ -1,468 +1,315 @@
 <?php
-// ดึงเอาไฟล์ตั้งค่าหลัก (config.php) เข้ามาก่อน เพื่อเชื่อมฐานข้อมูลและใช้ฟังก์ชันระบบ
+// pages/booking.php
+// หน้าจองสนาม: เลือกวัน → กดเลือกสนามจากแผนที่ → เลือกช่วงเวลา → อุปกรณ์ → ข้อมูลผู้จองและวิธีชำระเงิน
+// ราคาด้านขวาคำนวณจากเซิร์ฟเวอร์ (api/quote.php) ด้วยกติกาเดียวกับตอนบันทึกจริง (includes/booking_rules.php)
 require_once '../config.php';
+require_once '../includes/court_svg.php';
+requireLogin();
 
-// --- แก้ไขส่วนนี้: อนุญาตทั้ง User และ Admin ---
-// เช็คสิทธิ์ว่าใครเข้ามาได้บ้าง
-if (isLoggedIn()) {
-    // ผ่านเลย ถ้าเป็น User ทั่วไป
-} elseif (isAdmin()) {
-    // ผ่านเลย ถ้าเป็น Admin (แอดมินก็อยากมาจองบ้างได้)
-} else {
-    // ถ้าไม่ใช่ทั้งสอง (ยังไม่ได้ล็อกอิน) ให้ดีดไปหน้า Login ทันที
-    redirect('/login');
+$sportId = intval($_GET['sport_id'] ?? 0);
+$data = $sportId ? loadSportBookingData($pdo, $sportId) : null;
+if (!$data) redirect('/courts');
+['sport' => $sport, 'courts' => $courts, 'slots' => $slots, 'equipment' => $equipment] = $data;
+
+$userStmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
+$userStmt->execute([$_SESSION['user_id']]);
+$user = $userStmt->fetch();
+$isMember = isActiveMember($user);
+
+// --- วันที่ที่จองได้ ---
+$today = date('Y-m-d');
+$advanceDays = $isMember ? ADVANCE_DAYS_MEMBER : ADVANCE_DAYS_REGULAR;
+$selectedDate = $_GET['date'] ?? $today;
+if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate) || $selectedDate < $today
+    || $selectedDate > date('Y-m-d', strtotime("+{$advanceDays} days"))) {
+    $selectedDate = $today;
 }
-// ------------------------------------------
 
-// --- LOGIC ---
-// รับค่า sport_id จาก URL ถ้าไม่มีให้ดีดกลับไปหน้าเลือกกีฬา
- $sportId = intval($_GET['sport_id'] ?? 0);
-if (!$sportId) redirect('/courts');
+// --- สถานะสนาม / อุปกรณ์ของวันที่เลือก ---
+$taken = getTakenSlots($pdo, $sportId, $selectedDate);
+$usage = getEquipmentUsage($pdo, $sportId, $selectedDate);
+$nowTime = date('H:i:s');
 
-// Get Sport Info
-// ไปดึงข้อมูลกีฬาที่เลือกมา เช่น ชื่อกีฬา, ราคา, ระยะเวลา
- $stmt = $pdo->prepare("SELECT * FROM sports WHERE sport_id = ?");
- $stmt->execute([$sportId]);
- $sport = $stmt->fetch();
-if (!$sport) redirect('/courts');
-
-// Date Logic
-// จัดการเรื่องวันที่ วันนี้คือวันไหน ถ้ามีการกดเลือกวันอื่นมาก็เอาค่านั้น และคำนวณวันก่อน/หลัง สำหรับปุ่มเลื่อนวัน
- $selectedDate = $_GET['date'] ?? date('Y-m-d');
- $prevDate = date('Y-m-d', strtotime($selectedDate . ' -1 day'));
- $nextDate = date('Y-m-d', strtotime($selectedDate . ' +1 day'));
-
-// Get Courts
-// ดึงรายการสนาม (Court) ทั้งหมดของกีฬานี้ออกมาแสดงเป็นหัวตาราง
- $stmt = $pdo->prepare("SELECT * FROM courts WHERE sport_id = ?");
- $stmt->execute([$sportId]);
- $courts = $stmt->fetchAll();
-
-// Get Slots
-// ดึงช่วงเวลา (Time Slots) สำหรับจอง เช่น 09:00-10:00, 10:00-11:00 เรียงจากน้อยไปมาก
- $stmt = $pdo->prepare("SELECT * FROM time_slots WHERE sport_id = ? ORDER BY start_time ASC");
- $stmt->execute([$sportId]);
- $timeSlots = $stmt->fetchAll();
-
-// Get Equipment
-// ดึงรายการอุปกรณ์ที่สามารถเช่าได้ โดยเอาเฉพาะตัวที่ยังมี Stock เหลืออยู่
- $stmt = $pdo->prepare("SELECT * FROM equipment WHERE sport_id = ? AND stock > 0");
- $stmt->execute([$sportId]);
- $equipments = $stmt->fetchAll();
-
-// Get Bookings Map (Key: "courtId_slotId")
-// สร้าง "แผนที่การจอง" ขึ้นมา เพื่อเอาไว้เช็คว่าช่องไหนถูกจองไปแล้วบ้าง
-// เช็คเฉพาะสถานะ 'paid' (จ่ายแล้ว) เพื่อไม่ให้คนอื่นจองซ้ำ
- $bookingsMap = [];
- $stmt = $pdo->prepare("
-    SELECT court_id, slot_id FROM bookings 
-    WHERE booking_date = ? AND payment_status = 'paid'
-");
- $stmt->execute([$selectedDate]);
-foreach($stmt->fetchAll() as $b) {
-    $bookingsMap[$b['court_id'].'_'.$b['slot_id']] = true;
+$slotState = [];      // [courtId][slotId] => free|taken|past|closed
+$freeCount = [];      // [courtId] => จำนวนช่วงเวลาที่ว่าง
+foreach ($courts as $c) {
+    $freeCount[$c['court_id']] = 0;
+    foreach ($slots as $s) {
+        if ($c['status'] !== 'available') $state = 'closed';
+        elseif (isset($taken[$c['court_id'] . '_' . $s['slot_id']])) $state = 'taken';
+        elseif ($selectedDate === $today && $s['start_time'] <= $nowTime) $state = 'past';
+        else $state = 'free';
+        $slotState[$c['court_id']][$s['slot_id']] = $state;
+        if ($state === 'free') $freeCount[$c['court_id']]++;
+    }
 }
+
+// จำนวนอุปกรณ์ว่างของแต่ละช่วงเวลา ให้ JS จำกัดปุ่ม + ได้ถูกต้อง
+$equipmentJs = [];
+foreach ($equipment as $eq) {
+    $availableBySlot = [];
+    foreach ($slots as $s) $availableBySlot[$s['slot_id']] = max(0, (int) $eq['stock'] - ($usage[$eq['eq_id']][$s['slot_id']] ?? 0));
+    $equipmentJs[$eq['eq_id']] = ['perCourt' => maxPerCourt($eq), 'bySlot' => $availableBySlot];
+}
+
+$sportName = localized($sport, 'sport_name', 'name_th');
+$hours = intdiv((int) $sport['duration_minutes'], 60);
+$mins = (int) $sport['duration_minutes'] % 60;
+$durationText = trim(($hours ? t('unit.hours', ['n' => $hours]) : '') . ' ' . ($mins ? t('unit.minutes', ['n' => $mins]) : ''));
+$courtWord = $sport['slug'] === 'table-tennis' ? t('booking.table') : t('booking.court');
+
+$pageTitle = t('booking.title', ['sport' => $sportName]);
+$pageStyles = ['booking'];
+include '../includes/head.php';
 ?>
+<main class="page booking-page">
+    <div class="wrap">
+        <a href="<?= SITE_URL ?>/courts" class="back-link"><?= icon('arrow-left', 16) ?> <?= e('booking.back') ?></a>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Book <?= htmlspecialchars($sport['sport_name']) ?></title>
-    <!-- โหลดฟอนต์และ CSS มาแต่งหน้าตาเว็บ -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/home.css">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-</head>
-<body class='bodyy'>
-
-<!-- NAVBAR -->
-<?php include __DIR__ . '/../includes/navbar.php'; ?>
-    <!-- CONTENT -->
-    <!-- ส่วนเนื้อหาหลักของหน้าจอง -->
-    <div class="booking-page-container">
-        
-        <!-- LEFT: Selection -->
-        <!-- ฝั่งซ้าย: ตารางเลือกเวลาและอุปกรณ์ -->
-        <div class="booking-left">
-            <div class="page-header">
-                <h1>Booking: <?= htmlspecialchars($sport['sport_name']) ?></h1>
+        <header class="booking-head">
+            <div>
+                <span class="eyebrow"><?= icon('calendar', 14) ?> <?= e('booking.eyebrow') ?></span>
+                <h1><?= htmlspecialchars($sportName) ?></h1>
+                <div class="meta">
+                    <span><?= icon('tag', 16) ?> <?= e('booking.price_per_round', ['price' => formatPrice($sport['price'])]) ?></span>
+                    <span><?= icon('clock', 16) ?> <?= htmlspecialchars(t('booking.per_round', ['duration' => $durationText])) ?></span>
+                    <span><?= icon('grid', 16) ?> <?= e($sport['slug'] === 'table-tennis' ? 'booking.tables_n' : 'booking.courts_n', ['n' => count($courts)]) ?></span>
+                </div>
             </div>
+            <?php if ($isMember): ?>
+                <span class="badge badge-gold member-pill"><?= icon('crown', 14) ?> <?= e('booking.member_badge') ?></span>
+            <?php endif; ?>
+        </header>
 
-            <!-- Date Selector -->
-            <!-- ส่วนเลือกวันที่: มีปุ่มย้อนหลัง, แสดงวันปัจจุบัน, และปุ่มถัดไป -->
-            <div class="date-selector">
-                <a href="?sport_id=<?= $sportId ?>&date=<?= $prevDate ?>" class="date-arrow">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </a>
-                <div class="current-date"><?= date('D, d M Y', strtotime($selectedDate)) ?></div>
-                <a href="?sport_id=<?= $sportId ?>&date=<?= $nextDate ?>" class="date-arrow">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </a>
-            </div>
+        <?php if (!empty($_SESSION['flash_error'])): ?>
+        <div class="alert alert-danger mb-3" role="alert">
+            <?= icon('alert') ?>
+            <ul><?php foreach ((array) $_SESSION['flash_error'] as $msg): ?><li><?= htmlspecialchars($msg) ?></li><?php endforeach; ?></ul>
+        </div>
+        <?php unset($_SESSION['flash_error']); endif; ?>
 
-            <!-- Form Start -->
-            <!-- เริ่มฟอร์มการจอง จะส่งข้อมูลไปที่ api/book.php -->
-            <form action="<?= SITE_URL ?>/api/book.php" method="POST" id="bookingForm">
-                <input type="hidden" name="sport_id" value="<?= $sportId ?>">
-                <input type="hidden" name="booking_date" value="<?= $selectedDate ?>">
-                <!-- ตัวแปรซ่อนสำหรับเก็บค่า "court_id_slot_id" ที่ผู้ใช้กดเลือก -->
-                <input type="hidden" name="slot_court" id="inputSlotCourt" value="">
+        <?php if (!$isMember): ?>
+        <div class="alert alert-info mb-3">
+            <?= icon('info') ?>
+            <div><?= t('booking.regular_rules', ['days' => ADVANCE_DAYS_REGULAR]) ?>
+                <a href="<?= SITE_URL ?>/membership"><?= e('booking.see_membership') ?></a></div>
+        </div>
+        <?php endif; ?>
 
-                <!-- Grid Table -->
-                <!-- ตารางแสดงช่วงเวลาและสนาม -->
-                <table class="booking-grid-table">
-                    <thead>
-                        <tr>
-                            <th>Time</th>
-                            <?php foreach($courts as $c): ?>
-                                <!-- แสดงหัวตารางเป็นเลขที่สนาม (C1, C2...) -->
-                                <th>C<?= preg_replace('/[^0-9]/', '', $c['court_name']) ?></th>
-                            <?php endforeach; ?>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach($timeSlots as $slot): ?>
-                        <tr>
-                            <!-- แสดงเวลาเริ่มต้นของแถวนั้นๆ -->
-                            <td class="time-label">
-                                <?= date('g:i A', strtotime($slot['start_time'])) ?>
-                            </td>
-                            <?php foreach($courts as $c): 
-                                $key = $c['court_id'].'_'.$slot['slot_id'];
-                                
-                                // --- Logic ตรวจสอบ ---
-                                // 1. ถูกจองแล้ว? (เช็คจาก Map ที่สร้างไว้ด้านบน)
-                                $isBookedBySomeone = isset($bookingsMap[$key]);
-                                // 2. สถานะคอร์ทไม่ว่าง (Maintenance)? (เช็คจากตาราง courts)
-                                $isCourtUnavailable = ($c['status'] !== 'available');
-                                
-                                // สรุปสถานะว่าปุ่มนี้จะกดไม่ได้หรือเปล่า
-                                $isDisabled = $isBookedBySomeone || $isCourtUnavailable;
-                                
-                                // ข้อความแสดงผลและสีของปุ่ม
-                                $btnText = '🟢'; // ว่าง
-                                $btnClass = '';
-                                
-                                if ($isCourtUnavailable) {
-                                    $btnText = '🟡'; // แสดง "Maintenance"
-                                    $btnClass = 'is-maintenance'; // CSS Class สีเหลือง
-                                } elseif ($isBookedBySomeone) {
-                                    $btnText = '🔴'; // แสดง "ถูกจอง"
-                                    $btnClass = 'is-booked'; // CSS Class สีแดง
-                                }
-                            ?>
-                            <td>
-                                <!-- ปุ่มเลือกช่องเวลา จะมีข้อมูล data-attributes ติดมาด้วย เช่น ราคา, เวลา, ชื่อสนาม -->
-                                <button type="button" 
-                                        class="slot-btn <?= $btnClass ?>" 
-                                        data-court-id="<?= $c['court_id'] ?>"
-                                        data-slot-id="<?= $slot['slot_id'] ?>"
-                                        data-price="<?= $sport['price'] ?>"
-                                        data-time="<?= date('g:i A', strtotime($slot['start_time'])) ?>"
-                                        data-court-name="C<?= preg_replace('/[^0-9]/', '', $c['court_name']) ?>"
-                                        <?= $isDisabled ? 'disabled' : '' ?>>
-                                    <?= $btnText ?>
-                                </button>
-                            </td>
-                            <?php endforeach; ?>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
+        <form action="<?= SITE_URL ?>/api/book.php" method="POST" id="bookingForm" class="split" data-once novalidate>
+            <input type="hidden" name="sport_id" value="<?= $sportId ?>">
+            <input type="hidden" name="date" value="<?= $selectedDate ?>">
+            <input type="hidden" name="court_id" id="courtInput" value="">
 
-                <!-- Equipment -->
-                <!-- ส่วนเลือกอุปกรณ์เสริม -->
-                <?php if(!empty($equipments)): ?>
-                <div class="equipment-section">
-                    <h3 style="font-family:var(--font-display); margin-bottom:1rem;">Add Equipment</h3>
-                    <div class="equipment-grid">
-                        <?php foreach($equipments as $eq): ?>
-                        <div class="eq-item">
-                            <div class="eq-info">
-                                <h4><?= htmlspecialchars($eq['eq_name']) ?></h4>
-                                <p><?= number_format($eq['price']) ?> THB (Stock: <?= $eq['stock'] ?>)</p>
-                            </div>
-                            <!-- ปุ่มกดเพิ่ม/ลดจำนวนอุปกรณ์ -->
-                            <div class="eq-qty-control">
-                                <button type="button" class="eq-qty-btn" onclick="changeQty('eq<?= $eq['eq_id'] ?>', -1, <?= $eq['stock'] ?>)">-</button>
-                                <input type="number" name="equipment[<?= $eq['eq_id'] ?>]" id="eq<?= $eq['eq_id'] ?>" value="0" max="<?= $eq['stock'] ?>" data-price="<?= $eq['price'] ?>" data-name="<?= htmlspecialchars($eq['eq_name']) ?>" class="eq-qty-val" readonly>
-                                <button type="button" class="eq-qty-btn" onclick="changeQty('eq<?= $eq['eq_id'] ?>', 1, <?= $eq['stock'] ?>)">+</button>
+            <div class="stack">
+                <!-- 1. วันที่ -->
+                <section class="card">
+                    <div class="card-head"><h2><span class="step-no">1</span> <?= e('booking.step_date') ?></h2></div>
+                    <div class="card-body">
+                        <div class="date-strip" role="list">
+                            <?php for ($i = 0; $i <= ADVANCE_DAYS_MEMBER; $i++):
+                                $d = date('Y-m-d', strtotime("+{$i} days"));
+                                $locked = $i > $advanceDays;
+                                $ts = strtotime($d); ?>
+                                <a role="listitem"
+                                   class="date-chip<?= $d === $selectedDate ? ' is-active' : '' ?><?= $locked ? ' is-locked' : '' ?>"
+                                   href="<?= $locked ? SITE_URL . '/membership' : '?sport_id=' . $sportId . '&date=' . $d ?>"
+                                   <?= $locked ? 'title="' . e('booking.member_only_day') . '"' : '' ?>>
+                                    <span class="dc-day"><?= $i === 0 ? e('booking.today') : htmlspecialchars(LANG === 'th' ? ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'][date('w', $ts)] : date('D', $ts)) ?></span>
+                                    <span class="dc-date"><?= date('j', $ts) ?></span>
+                                    <span class="dc-month"><?= htmlspecialchars(LANG === 'th' ? ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.'][date('n', $ts) - 1] : date('M', $ts)) ?></span>
+                                    <?php if ($locked): ?><span class="dc-lock"><?= icon('crown', 12) ?></span><?php endif; ?>
+                                    <?php if (in_array((int) date('j', $ts), [1, 16], true)): ?><span class="dc-deal" title="<?= e('discount.day_1_16') ?>">-30%</span><?php endif; ?>
+                                </a>
+                            <?php endfor; ?>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. แผนที่สนาม -->
+                <section class="card">
+                    <div class="card-head">
+                        <h2><span class="step-no">2</span> <?= e('booking.step_court', ['court' => $courtWord]) ?></h2>
+                        <div class="map-legend">
+                            <span><i class="lg lg-free"></i><?= e('booking.legend_free') ?></span>
+                            <span><i class="lg lg-selected"></i><?= e('booking.legend_selected') ?></span>
+                            <span><i class="lg lg-full"></i><?= e('booking.legend_full') ?></span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="venue venue-<?= htmlspecialchars($sport['slug']) ?> venue-n<?= count($courts) ?>">
+                            <div class="venue-label"><?= icon('map-pin', 14) ?> HIT THE COURT · <?= htmlspecialchars($sportName) ?></div>
+                            <div class="venue-grid">
+                                <?php foreach ($courts as $c):
+                                    $free = $freeCount[$c['court_id']];
+                                    $closed = $c['status'] !== 'available'; ?>
+                                    <button type="button" class="court-btn<?= ($free === 0 || $closed) ? ' is-full' : '' ?>"
+                                            data-court="<?= $c['court_id'] ?>" data-number="<?= $c['court_number'] ?>"
+                                            aria-pressed="false"
+                                            aria-label="<?= e('booking.court_aria', ['court' => $courtWord, 'n' => $c['court_number'], 'free' => $free]) ?>">
+                                        <?= courtSvg($sport['slug']) ?>
+                                        <span class="court-tag"><?= htmlspecialchars($courtWord) ?> <?= $c['court_number'] ?></span>
+                                        <span class="court-free">
+                                            <?php if ($closed): ?><?= e('booking.closed') ?>
+                                            <?php elseif ($free === 0): ?><?= e('booking.full') ?>
+                                            <?php else: ?><?= e('booking.free_slots', ['n' => $free]) ?><?php endif; ?>
+                                        </span>
+                                        <span class="court-check"><?= icon('check', 16) ?></span>
+                                    </button>
+                                <?php endforeach; ?>
                             </div>
                         </div>
+                        <p class="hint mt-2 mb-0"><?= icon('info', 14) ?> <?= e('booking.map_hint') ?></p>
+                    </div>
+                </section>
+
+                <!-- 3. ช่วงเวลา -->
+                <section class="card">
+                    <div class="card-head">
+                        <h2><span class="step-no">3</span> <?= e('booking.step_time') ?></h2>
+                        <span class="badge <?= $isMember ? 'badge-gold' : '' ?>"><?= $isMember ? e('booking.multi_slot') : e('booking.single_slot') ?></span>
+                    </div>
+                    <div class="card-body">
+                        <p class="muted mb-0" id="slotPlaceholder"><?= e('booking.pick_court_first') ?></p>
+                        <?php foreach ($courts as $c): ?>
+                        <div class="slot-grid" data-slots-for="<?= $c['court_id'] ?>" hidden>
+                            <?php foreach ($slots as $i => $s): $state = $slotState[$c['court_id']][$s['slot_id']]; ?>
+                            <label class="slot slot-<?= $state ?>">
+                                <input type="<?= $isMember ? 'checkbox' : 'radio' ?>" name="slot_ids[]" value="<?= $s['slot_id'] ?>"
+                                       data-index="<?= $i ?>" <?= $state !== 'free' ? 'disabled' : '' ?>>
+                                <span class="slot-box">
+                                    <span class="slot-round"><?= e('booking.round', ['n' => $i + 1]) ?></span>
+                                    <span class="slot-time"><?= formatTime($s['start_time']) ?>–<?= formatTime($s['end_time']) ?></span>
+                                    <span class="slot-state"><?= e('booking.slot_' . $state) ?></span>
+                                </span>
+                            </label>
+                            <?php endforeach; ?>
+                        </div>
                         <?php endforeach; ?>
+                        <?php if ($isMember): ?>
+                            <p class="hint mt-2 mb-0"><?= icon('percent', 14) ?> <?= e('booking.consecutive_hint') ?></p>
+                        <?php endif; ?>
+                    </div>
+                </section>
+
+                <!-- 4. อุปกรณ์ -->
+                <section class="card">
+                    <div class="card-head"><h2><span class="step-no">4</span> <?= e('booking.step_equipment') ?> <span class="opt muted small">(<?= e('common.optional') ?>)</span></h2></div>
+                    <div class="card-body">
+                        <?php if (!$equipment): ?>
+                            <p class="muted mb-0"><?= e('booking.no_equipment') ?></p>
+                        <?php else: ?>
+                        <ul class="equip-list">
+                            <?php foreach ($equipment as $eq): $free = (int) $eq['member_free_units']; ?>
+                            <li class="equip" data-eq="<?= $eq['eq_id'] ?>">
+                                <div class="equip-info">
+                                    <strong><?= htmlspecialchars(localized($eq, 'eq_name', 'name_th')) ?></strong>
+                                    <span class="equip-price"><?= e('booking.per_unit', ['price' => formatPrice($eq['price'])]) ?></span>
+                                    <?php if ($note = localized($eq, 'unit_note', 'unit_note_th')): ?>
+                                        <span class="hint"><?= htmlspecialchars($note) ?></span>
+                                    <?php endif; ?>
+                                    <span class="equip-fine"><?= icon('alert', 13) ?> <?= e('booking.fine', ['amount' => formatPrice($eq['fine_amount'])]) ?></span>
+                                    <span class="hint" data-eq-limit><?= e('booking.max_per_court', ['n' => maxPerCourt($eq)]) ?></span>
+                                    <?php if ($isMember && $free > 0): ?>
+                                        <span class="badge badge-gold"><?= icon('gift', 12) ?> <?= e('booking.free_units', ['n' => $free]) ?></span>
+                                    <?php elseif (!$isMember && $free > 0): ?>
+                                        <span class="hint"><?= icon('crown', 12) ?> <?= e('booking.member_free_units', ['n' => $free]) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                                <div class="qty">
+                                    <button type="button" class="qty-btn" data-step="-1" aria-label="<?= e('common.decrease') ?>"><?= icon('minus', 16) ?></button>
+                                    <input type="number" class="qty-input" name="equipment[<?= $eq['eq_id'] ?>]" value="0" min="0"
+                                           max="<?= maxPerCourt($eq) ?>" inputmode="numeric" aria-label="<?= e('common.quantity') ?>">
+                                    <button type="button" class="qty-btn" data-step="1" aria-label="<?= e('common.increase') ?>"><?= icon('plus', 16) ?></button>
+                                </div>
+                            </li>
+                            <?php endforeach; ?>
+                        </ul>
+                        <p class="note mt-2 mb-0"><?= icon('shield', 16) ?> <?= e('booking.theft_rule') ?></p>
+                        <?php endif; ?>
+                    </div>
+                </section>
+
+                <!-- 5. ข้อมูลผู้จอง + วิธีชำระเงิน -->
+                <section class="card">
+                    <div class="card-head"><h2><span class="step-no">5</span> <?= e('booking.step_info') ?></h2></div>
+                    <div class="card-body">
+                        <div class="form-grid">
+                            <div class="field">
+                                <label class="label" for="first_name"><?= e('form.first_name') ?></label>
+                                <input class="input" id="first_name" name="first_name" required maxlength="100" autocomplete="given-name" value="<?= htmlspecialchars($user['first_name'] ?? '') ?>">
+                            </div>
+                            <div class="field">
+                                <label class="label" for="last_name"><?= e('form.last_name') ?></label>
+                                <input class="input" id="last_name" name="last_name" required maxlength="100" autocomplete="family-name" value="<?= htmlspecialchars($user['last_name'] ?? '') ?>">
+                            </div>
+                            <div class="field">
+                                <label class="label" for="phone"><?= e('form.phone') ?></label>
+                                <input class="input" id="phone" name="phone" type="tel" required maxlength="20" autocomplete="tel" inputmode="tel"
+                                       pattern="[0-9+\-\s]{9,20}" title="<?= e('err.phone_invalid') ?>" value="<?= htmlspecialchars($user['phone'] ?? '') ?>">
+                            </div>
+                            <div class="field">
+                                <label class="label" for="email"><?= e('form.email') ?></label>
+                                <input class="input" id="email" name="email" type="email" required maxlength="100" autocomplete="email" value="<?= htmlspecialchars($user['email'] ?? '') ?>">
+                            </div>
+                        </div>
+
+                        <p class="label mt-3 mb-1"><?= e('payment.method') ?></p>
+                        <div class="choices">
+                            <label class="choice">
+                                <input type="radio" name="payment_method" value="promptpay" checked>
+                                <span class="choice-box"><span class="choice-icon"><?= icon('qr') ?></span><span><strong><?= e('payment.promptpay') ?></strong><small><?= e('payment.promptpay_desc') ?></small></span></span>
+                            </label>
+                            <label class="choice">
+                                <input type="radio" name="payment_method" value="bank_transfer">
+                                <span class="choice-box"><span class="choice-icon"><?= icon('bank') ?></span><span><strong><?= e('payment.bank') ?></strong><small><?= e('payment.bank_desc') ?></small></span></span>
+                            </label>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <!-- สรุปราคา -->
+            <aside class="sticky">
+                <div class="card summary-card">
+                    <div class="card-head"><h2><?= icon('receipt', 18) ?> <?= e('booking.summary') ?></h2></div>
+                    <div class="card-body">
+                        <div id="summary" aria-live="polite"><p class="muted mb-0"><?= e('booking.summary_empty') ?></p></div>
+
+                        <?php if ($isMember): ?>
+                        <label class="points-toggle<?= (int) $user['points'] >= POINTS_FOR_FREE_ROUND ? '' : ' is-disabled' ?>">
+                            <input type="checkbox" name="use_points" value="1" <?= (int) $user['points'] >= POINTS_FOR_FREE_ROUND ? '' : 'disabled' ?>>
+                            <span><?= icon('trophy', 16) ?> <?= e('booking.use_points', ['points' => (int) $user['points'], 'need' => POINTS_FOR_FREE_ROUND]) ?></span>
+                        </label>
+                        <?php endif; ?>
+
+                        <button type="submit" class="btn btn-primary btn-lg btn-block mt-2" id="submitBtn" disabled>
+                            <?= e('booking.continue') ?> <?= icon('arrow-right', 18) ?>
+                        </button>
+                        <p class="hint center mt-1 mb-0"><?= e('booking.hold_note', ['min' => BOOKING_HOLD_MINUTES]) ?></p>
                     </div>
                 </div>
-                <?php endif; ?>
-
-            </form>
-        </div>
-
-        <!-- RIGHT: Summary -->
-        <!-- ฝั่งขวา: กล่องสรุปรายการและราคา -->
-        <div class="booking-right">
-            <div class="summary-box">
-                <h3 style="font-family:var(--font-display); margin-bottom:1.5rem;">Summary</h3>
-                
-                <div class="sum-row">
-                    <span>Date</span>
-                    <span style="font-weight:600; color:var(--secondary)"><?= date('d M Y', strtotime($selectedDate)) ?></span>
-                </div>
-                <div class="sum-row">
-                    <span>Time</span>
-                    <!-- ตรงนี้จะถูกเปลี่ยนโดย JavaScript ตอนกดปุ่ม -->
-                    <span id="sumTime" style="font-weight:600; color:var(--secondary)">-</span>
-                </div>
-                <div class="sum-row">
-                    <span>Court</span>
-                    <!-- ตรงนี้จะถูกเปลี่ยนโดย JavaScript ตอนกดปุ่ม -->
-                    <span id="sumCourt" style="font-weight:600; color:var(--secondary)">-</span>
-                </div>
-                
-                <div id="equipSummary" style="display:none;" class="sum-row">
-                    <span>Equipment</span>
-                    <!-- แสดงรายการอุปกรณ์ที่เลือก -->
-                    <span id="sumEquip" style="font-weight:600; color:var(--secondary); text-align:right;"></span>
-                </div>
-
-                <div class="sum-row total">
-                    <span>Total</span>
-                    <!-- แสดงราคารวม -->
-                    <span id="sumTotal">0 THB</span>
-                </div>
-
-                <!-- ปุ่มยืนยันการจอง (จะใช้งานได้ก็ต่อเมื่อเลือกเวลาแล้ว) -->
-                <button type="submit" form="bookingForm" id="btnSubmit" class="btn-submit" disabled>
-                    Proceed to Payment
-                </button>
-            </div>
-        </div>
-
+            </aside>
+        </form>
     </div>
 
-   <!-- FOOTER (Same as Homepage) -->
-    <!-- ส่วนท้ายเว็บไซต์ (Footer) -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div>
-                    <span class="footer-logo">HIT THE COURT</span>
-                    <p class="footer-text">
-                        College of Arts, Media and Technology,<br>
-                        Chiang Mai University<br>
-                        © 2026 Hit the Court. All rights reserved.
-                    </p>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Menu</h4>
-                    <ul>
-                        <li><a href="<?= SITE_URL ?>/courts">Court Reservation</a></li>
-                        <li><a href="<?= SITE_URL ?>/index#about">About Us</a></li>
-                        <li><a href="<?= SITE_URL ?>/guidebook">Guidebook</a></li>
-                        <li><a href="<?= SITE_URL ?>/reports">Contact Us</a></li>
-                    </ul>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Contact Us</h4>
-                    <ul>
-                        <li><a href="tel:111-222-3"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"></path></svg> 111-222-3</a></li>
-                        <li><a href="mailto:peoplecmucamt@gmail.com"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> peoplecmucamt@gmail.com</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>HIT THE COURT</p>
-            </div>
-        </div>
-    </footer>
+    <!-- แถบสรุปด้านล่างบนมือถือ -->
+    <div class="mobile-bar" id="mobileBar" hidden>
+        <div><span class="muted small"><?= e('booking.total') ?></span><strong id="mobileTotal">-</strong></div>
+        <button type="button" class="btn btn-primary" id="mobileSubmit"><?= e('booking.continue') ?></button>
+    </div>
+</main>
 
-    <!-- JAVASCRIPT -->
-    <script>
-        // 1. State
-        // เก็บตัวแปรสถานะต่างๆ เช่น ปุ่มที่กดเลือกอยู่ และราคารวมปัจจุบัน
-        let selectedBtn = null;
-        let currentTotal = 0;
-
-        // 2. Slot Selection
-        // จับกลุ่มปุ่มที่ "กดได้" (ไม่ใช่ปุ่มที่ถูกจองหรือซ่อมบำรุง) มาไว้ในตัวแปร buttons
-        const buttons = document.querySelectorAll('.slot-btn:not(.is-booked):not(.is-maintenance)');
-        
-        buttons.forEach(btn => {
-            btn.addEventListener('click', function() {
-                // Reset previous
-                // เมื่อกดปุ่มใหม่ ให้รีเซ็ตปุ่มเก่าก่อน (เอาสีเลือกออก, เปลี่ยนข้อความกลับเป็น Available)
-                if (selectedBtn) {
-                    selectedBtn.classList.remove('is-selected');
-                    selectedBtn.innerText = '🟢';
-                }
-
-                // Set new
-                // แล้วมาจัดการปุ่มใหม่ที่กด (เปลี่ยนสี, เปลี่ยนข้อความเป็น Selected)
-                this.classList.add('is-selected');
-                this.innerText = '⚪️';
-                selectedBtn = this;
-
-                // Update Hidden Input
-                // เอาค่า court_id กับ slot_id มาต่อกัน แล้วยัดใส่ input hidden เพื่อส่งไป Backend
-                const value = this.dataset.courtId + '_' + this.dataset.slotId;
-                document.getElementById('inputSlotCourt').value = value;
-
-                // Update UI
-                // อัปเดตข้อความในกล่อง Summary ทางด้านขวา
-                document.getElementById('sumTime').innerText = this.dataset.time;
-                document.getElementById('sumCourt').innerText = this.dataset.courtName;
-                document.getElementById('btnSubmit').disabled = false; // ให้ปุ่มจองใช้งานได้
-
-                calculateTotal(); // เรียกคำนวณราคาใหม่
-            });
-        });
-
-        // 3. Equipment Quantity
-        // ฟังก์ชันสำหรับปุ่มกดเพิ่ม/ลดจำนวนอุปกรณ์
-        function changeQty(id, change, max) {
-            const input = document.getElementById(id);
-            let val = parseInt(input.value) + change;
-            // เช็คขอบเขต ไม่ให้ติดลบ และไม่เกิน Stock
-            if (val < 0) val = 0;
-            if (val > max) val = max;
-            input.value = val;
-            calculateTotal(); // คำนวณราคาใหม่ทุกครั้งที่เปลี่ยนจำนวน
-        }
-
-        // 4. Calculate Total
-        // ฟังก์ชันคำนวณราคารวมแบบ Real-time
-        function calculateTotal() {
-            let total = 0;
-            
-            // Court Price
-            // ถ้ามีการเลือกสนามแล้ว ให้เอาราคาสนามบวกเข้าไปก่อน
-            if (selectedBtn) {
-                total += parseFloat(selectedBtn.dataset.price);
-            }
-
-            // Equipment Price
-            // วนลูปเช็คทุกช่อง input ของอุปกรณ์ ว่ามีการกรอกจำนวนหรือไม่
-            let equipDetails = [];
-            document.querySelectorAll('.eq-qty-val').forEach(input => {
-                if (input.value > 0) {
-                    const qty = parseInt(input.value);
-                    const price = parseFloat(input.dataset.price);
-                    const name = input.dataset.name || 'Item'; 
-                    
-                    total += (qty * price); // บวกราคาอุปกรณ์
-                    equipDetails.push(name + ' x ' + qty); // สร้างข้อความสรุป
-                }
-            });
-
-            // Update Display
-            // อัปเดตตัวเลขราคารวม
-            document.getElementById('sumTotal').innerText = total.toLocaleString() + ' THB';
-            
-            const eDiv = document.getElementById('equipSummary');
-            const sumEquip = document.getElementById('sumEquip');
-            
-            // ถ้ามีอุปกรณ์ ก็แสดงรายการอุปกรณ์ในกล่อง Summary
-            if (equipDetails.length > 0) {
-                eDiv.style.display = 'flex';
-                sumEquip.innerHTML = equipDetails.join('<br>'); 
-            } else {
-                eDiv.style.display = 'none';
-                sumEquip.innerText = '';
-            }
-        }
-
-        // Script สำหรับจัดการเมนูบนมือถือ
-        document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.querySelector('.mobile-toggle');
-    const navbar = document.getElementById('navbar');
-    const body = document.body;
-
-    // Toggle Mobile Menu
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function() {
-            navbar.classList.toggle('menu-open');
-            
-            // Toggle Icon (Hamburger to Close)
-            const icon = this.querySelector('svg');
-            if (navbar.classList.contains('menu-open')) {
-                icon.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>'; // X icon
-                body.style.overflow = 'hidden'; // Prevent scroll
-            } else {
-                icon.innerHTML = '<line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>'; // Hamburger icon
-                body.style.overflow = ''; // Enable scroll
-            }
-        });
+<script>
+window.BOOKING = {
+    quoteUrl: <?= json_encode(SITE_URL . '/api/quote.php') ?>,
+    isMember: <?= $isMember ? 'true' : 'false' ?>,
+    equipment: <?= json_encode($equipmentJs) ?>,
+    text: {
+        selectCourt: <?= json_encode(t('booking.summary_empty')) ?>,
+        error: <?= json_encode(t('err.generic')) ?>
     }
-
-    // Handle Mobile Dropdowns (Click to open)
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-        const link = item.querySelector('.nav-link');
-        const dropdown = item.querySelector('.dropdown-menu');
-        
-        if (dropdown && window.innerWidth <= 768) {
-            link.addEventListener('click', function(e) {
-                if (navbar.classList.contains('menu-open')) {
-                     e.preventDefault(); // Prevent link jump
-                     item.classList.toggle('mobile-sub-open');
-                }
-            });
-        }
-    });
-
-    // Handle User Menu Click on Mobile
-    const userMenu = document.querySelector('.user-menu');
-    if (userMenu) {
-        const userBtn = userMenu.querySelector('.user-btn');
-        userBtn.addEventListener('click', function(e) {
-            if (window.innerWidth <= 768) {
-                e.stopPropagation();
-                userMenu.classList.toggle('active');
-            }
-        });
-    }
-    
-    // Script สำหรับปิดเมนูเวลากดข้างนอก
-   document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.querySelector('.mobile-toggle');
-    const navbar = document.getElementById('navbar');
-    const body = document.body;
-    const userMenu = document.querySelector('.user-menu');
-
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            navbar.classList.toggle('menu-open');
-            body.style.overflow = navbar.classList.contains('menu-open') ? 'hidden' : '';
-        });
-    }
-
-    if (userMenu) {
-        userMenu.querySelector('.user-btn').addEventListener('click', function(e) {
-            e.stopPropagation();
-            userMenu.classList.toggle('active');
-        });
-    }
-
-    document.addEventListener('click', function(e) {
-        if (navbar?.classList.contains('menu-open') && !navbar.contains(e.target)) {
-            navbar.classList.remove('menu-open');
-            body.style.overflow = '';
-        }
-        if (userMenu?.classList.contains('active') && !userMenu.contains(e.target)) {
-            userMenu.classList.remove('active');
-        }
-    });
-});
-});
-    </script>
-
-
-
-</body>
-</html>
+};
+</script>
+<script src="<?= SITE_URL ?>/assets/js/booking.js" defer></script>
+<?php include '../includes/footer.php'; ?>

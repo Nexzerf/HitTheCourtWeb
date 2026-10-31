@@ -20,7 +20,7 @@
     -webkit-backdrop-filter: saturate(180%) blur(12px);
     backdrop-filter: saturate(180%) blur(12px);
     border-bottom: 1px solid transparent;
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-family: 'Inter', 'IBM Plex Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif;
     transition: box-shadow .2s ease, border-color .2s ease;
 }
 .site-nav.is-scrolled {
@@ -162,6 +162,27 @@
 }
 .site-nav .sn-dropdown a:hover { background: #F1F5F9; }
 
+/* Language switch */
+.sn-lang {
+    display: flex;
+    padding: 3px;
+    border: 1px solid var(--sn-border);
+    border-radius: 999px;
+    background: #fff;
+}
+.site-nav .sn-lang a {
+    min-width: 34px;
+    padding: 5px 8px;
+    border-radius: 999px;
+    color: var(--sn-muted);
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: none;
+    letter-spacing: 0.02em;
+}
+.site-nav .sn-lang a.is-active { background: var(--sn-text); color: #fff; }
+
 /* Hamburger */
 .site-nav .sn-toggle {
     display: none;
@@ -206,6 +227,7 @@
     .sn-username, .sn-caret { display: none; }
     .site-nav .sn-user-btn { padding: 0; width: 44px; justify-content: center; border: 0; background: transparent; }
     .sn-actions { margin-left: auto; gap: 4px; }
+    .site-nav .sn-lang a { min-width: 30px; padding: 5px 6px; }
 
     .sn-panel {
         position: fixed;

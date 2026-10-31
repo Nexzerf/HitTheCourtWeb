@@ -193,6 +193,14 @@ if (session_status() === PHP_SESSION_NONE) {
 }
 
 // ============================================
+// LANGUAGE / ICONS / BOOKING RULES
+// ============================================
+// ระบบสองภาษา (t(), e(), localized()), ไอคอน SVG (icon()) และกติกาการจอง
+require_once __DIR__ . '/includes/i18n.php';
+require_once __DIR__ . '/includes/icons.php';
+require_once __DIR__ . '/includes/booking_rules.php';
+
+// ============================================
 // FILE UPLOADS
 // ============================================
 /**
@@ -308,7 +316,8 @@ function generateBookingCode() {
  * @return string
  */
 function formatPrice($price) {
-    return number_format($price, 0) . ' THB';
+    $decimals = floor($price) == $price ? 0 : 2;
+    return number_format($price, $decimals) . ' ' . t('currency');
 }
 
 /**
@@ -318,7 +327,7 @@ function formatPrice($price) {
  * @return string
  */
 function formatDate($date) {
-    return date('d M Y', strtotime($date));
+    return formatDateLocalized($date);
 }
 
 
