@@ -4,7 +4,8 @@
 require_once '../config.php';
 requireAdmin();
 
-$days = in_array((int) ($_GET['days'] ?? 30), [7, 30, 90, 365], true) ? (int) $_GET['days'] : 30;
+$days = (int) ($_GET['days'] ?? 30);
+if (!in_array($days, [7, 30, 90, 365], true)) $days = 30;
 $from = date('Y-m-d', strtotime("-{$days} days"));
 
 $bySport = $pdo->prepare("SELECT s.sport_name, s.name_th, COUNT(b.booking_id) AS n, COALESCE(SUM(b.total_price), 0) AS revenue

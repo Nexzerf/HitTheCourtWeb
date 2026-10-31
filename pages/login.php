@@ -32,14 +32,14 @@ $authTitle = t('auth.login_title');
 $authSubtitle = t('auth.login_subtitle');
 include '../includes/auth_layout_top.php';
 ?>
-<?php if (!empty($_GET['registered'])): ?>
+<?php if (!empty($_GET['registered']) && $_SERVER['REQUEST_METHOD'] !== 'POST'): ?>
     <div class="alert alert-success mb-2" role="status"><?= icon('check-circle') ?><div><?= e('auth.registered') ?></div></div>
 <?php endif; ?>
 <?php if ($error): ?>
     <div class="alert alert-danger mb-2" role="alert"><?= icon('alert') ?><div><?= htmlspecialchars($error) ?></div></div>
 <?php endif; ?>
 
-<form method="POST" novalidate data-once>
+<form method="POST" action="<?= SITE_URL ?>/login<?= $next !== '/' ? '?next=' . urlencode($next) : '' ?>" novalidate data-once>
     <input type="hidden" name="next" value="<?= htmlspecialchars($next) ?>">
     <div class="field">
         <label class="label" for="username"><?= e('auth.username_or_email') ?></label>
