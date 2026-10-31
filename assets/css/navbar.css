@@ -1,0 +1,266 @@
+/* =====================================================
+   NAVBAR กลางของทั้งเว็บ (includes/navbar.php)
+   ใช้ชื่อคลาสขึ้นต้นด้วย sn- เพื่อไม่ให้ชนกับ CSS เดิมของแต่ละหน้า
+   ===================================================== */
+.site-nav {
+    --sn-height: 72px;
+    --sn-primary: #2563EB;
+    --sn-primary-dark: #1D4ED8;
+    --sn-text: #0F172A;
+    --sn-muted: #475569;
+    --sn-border: #E2E8F0;
+    --sn-soft: #EFF6FF;
+    --sn-danger: #DC2626;
+
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 1000;
+    height: var(--sn-height);
+    background: rgba(255, 255, 255, 0.97);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid transparent;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    transition: box-shadow .2s ease, border-color .2s ease;
+}
+.site-nav.is-scrolled {
+    border-bottom-color: var(--sn-border);
+    box-shadow: 0 4px 20px rgba(15, 23, 42, 0.06);
+}
+.site-nav *, .site-nav *::before, .site-nav *::after { box-sizing: border-box; }
+
+.sn-container {
+    max-width: 1240px;
+    height: 100%;
+    margin: 0 auto;
+    padding: 0 clamp(16px, 4vw, 32px);
+    display: flex;
+    align-items: center;
+    gap: 24px;
+}
+
+/* ---------- Logo ---------- */
+.site-nav .sn-logo {
+    font-family: 'Space Grotesk', 'Inter', sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.15rem, 1rem + 0.6vw, 1.45rem);
+    letter-spacing: -0.01em;
+    color: var(--sn-text);
+    text-decoration: none;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.site-nav .sn-logo span { color: var(--sn-primary); }
+
+/* ---------- Links (PC) ---------- */
+.sn-panel { flex: 1; display: flex; justify-content: center; }
+.site-nav .sn-links {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.site-nav .sn-link {
+    display: block;
+    padding: 8px 14px;
+    border-radius: 999px;
+    color: var(--sn-muted);
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background .15s ease, color .15s ease;
+}
+.site-nav .sn-link:hover { color: var(--sn-text); background: #F1F5F9; }
+.site-nav .sn-link.is-active { color: var(--sn-primary); background: var(--sn-soft); font-weight: 600; }
+.site-nav .sn-danger { color: var(--sn-danger) !important; }
+.sn-panel-account { display: none; }
+
+/* ---------- Right side ---------- */
+.sn-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.site-nav .sn-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    padding: 0 18px;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    border: 1.5px solid transparent;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+}
+.site-nav .sn-btn-primary { background: var(--sn-primary); color: #fff; }
+.site-nav .sn-btn-primary:hover { background: var(--sn-primary-dark); }
+.site-nav .sn-btn-ghost { color: var(--sn-text); }
+.site-nav .sn-btn-ghost:hover { background: #F1F5F9; }
+.site-nav .sn-btn-outline { border-color: var(--sn-border); color: var(--sn-text); background: #fff; }
+
+/* User menu */
+.sn-user { position: relative; }
+.site-nav .sn-user-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 44px;
+    padding: 0 10px 0 4px;
+    border: 1px solid var(--sn-border);
+    border-radius: 999px;
+    background: #fff;
+    color: var(--sn-text);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.site-nav .sn-user-btn:hover { border-color: #CBD5E1; box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06); }
+.sn-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #3B82F6, #1D4ED8);
+    color: #fff;
+    display: grid;
+    place-items: center;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+.sn-username { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sn-caret { color: var(--sn-muted); transition: transform .2s ease; }
+.sn-user.is-open .sn-caret { transform: rotate(180deg); }
+
+.sn-dropdown {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 8px);
+    min-width: 200px;
+    padding: 6px;
+    background: #fff;
+    border: 1px solid var(--sn-border);
+    border-radius: 14px;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.14);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-6px);
+    transition: opacity .15s ease, transform .15s ease, visibility .15s;
+}
+.sn-user.is-open .sn-dropdown { opacity: 1; visibility: visible; transform: none; }
+.site-nav .sn-dropdown a {
+    display: block;
+    padding: 10px 12px;
+    border-radius: 10px;
+    color: var(--sn-text);
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+}
+.site-nav .sn-dropdown a:hover { background: #F1F5F9; }
+
+/* Hamburger */
+.site-nav .sn-toggle {
+    display: none;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 12px;
+    background: transparent;
+    cursor: pointer;
+    position: relative;
+}
+.site-nav .sn-toggle:hover { background: #F1F5F9; }
+.sn-toggle span {
+    position: absolute;
+    left: 12px;
+    width: 20px;
+    height: 2px;
+    border-radius: 2px;
+    background: var(--sn-text);
+    transition: transform .25s ease, opacity .2s ease, top .25s ease;
+}
+.sn-toggle span:nth-child(1) { top: 15px; }
+.sn-toggle span:nth-child(2) { top: 21px; }
+.sn-toggle span:nth-child(3) { top: 27px; }
+.site-nav.is-open .sn-toggle span:nth-child(1) { top: 21px; transform: rotate(45deg); }
+.site-nav.is-open .sn-toggle span:nth-child(2) { opacity: 0; }
+.site-nav.is-open .sn-toggle span:nth-child(3) { top: 21px; transform: rotate(-45deg); }
+
+.sn-backdrop { display: none; }
+
+/* Focus ring for keyboard users */
+.site-nav a:focus-visible, .site-nav button:focus-visible {
+    outline: 2px solid var(--sn-primary);
+    outline-offset: 2px;
+}
+
+/* ---------- Tablet / Mobile ---------- */
+@media (max-width: 900px) {
+    .site-nav { --sn-height: 64px; }
+    .site-nav .sn-toggle { display: block; }
+    .sn-desktop-only { display: none !important; }
+    .sn-username, .sn-caret { display: none; }
+    .site-nav .sn-user-btn { padding: 0; width: 44px; justify-content: center; border: 0; background: transparent; }
+    .sn-actions { margin-left: auto; gap: 4px; }
+
+    .sn-panel {
+        position: fixed;
+        top: var(--sn-height);
+        left: 0;
+        right: 0;
+        max-height: calc(100dvh - var(--sn-height));
+        overflow-y: auto;
+        flex-direction: column;
+        justify-content: flex-start;
+        gap: 12px;
+        padding: 12px clamp(16px, 4vw, 32px) 20px;
+        background: #fff;
+        border-bottom: 1px solid var(--sn-border);
+        box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(-8px);
+        transition: opacity .2s ease, transform .2s ease, visibility .2s;
+    }
+    .site-nav.is-open .sn-panel { opacity: 1; visibility: visible; transform: none; }
+
+    .site-nav .sn-links { flex-direction: column; align-items: stretch; gap: 2px; }
+    .site-nav .sn-link { padding: 12px 14px; border-radius: 12px; font-size: 1rem; }
+
+    .sn-panel-account {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-top: 12px;
+        border-top: 1px solid var(--sn-border);
+    }
+    .sn-panel-account .sn-btn { height: 46px; width: 100%; margin-top: 6px; }
+    /* บนมือถือ ใช้เมนูบัญชีในแผงแทน dropdown */
+    .sn-dropdown { display: none; }
+
+    .sn-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        background: rgba(15, 23, 42, 0.35);
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity .2s ease, visibility .2s;
+    }
+    .site-nav.is-open + .sn-backdrop { opacity: 1; visibility: visible; }
+    body.sn-lock { overflow: hidden; }
+}
+
+@media (min-width: 901px) {
+    /* บน PC กดรูปโปรไฟล์เพื่อเปิด dropdown */
+    .sn-panel-account { display: none !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .site-nav, .site-nav * { transition: none !important; }
+}
