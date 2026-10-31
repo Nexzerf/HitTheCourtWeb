@@ -210,3 +210,23 @@
     .mobile-bar strong { color: var(--c-primary); font-family: var(--font-display); font-size: 1.25rem; }
     .booking-page { padding-bottom: 120px; }
 }
+
+/* วันที่: ป้ายส่วนลดอยู่ในกล่อง ไม่ทับข้อความ */
+.date-strip { gap: 10px; padding: 2px 2px 8px; grid-auto-columns: minmax(68px, 1fr); }
+.date-chip { padding: 12px 6px; border-radius: var(--radius); border-width: 1px; gap: 2px; }
+.date-chip.is-active { box-shadow: none; }
+.dc-day { text-transform: none; }
+.dc-deal { position: static; transform: none; margin-top: 4px; padding: 0 6px; border-radius: 4px; background: var(--c-danger-soft); color: var(--c-danger); font-size: .66rem; line-height: 1.6; }
+.date-chip.is-active .dc-deal { background: rgba(255, 255, 255, .2); color: #fff; }
+
+/* อุปกรณ์: ชื่อ + ราคาบรรทัดเดียว รายละเอียดเป็นตัวเล็กสีเทา */
+.equip { padding: 18px 0; gap: 20px; }
+.equip-info { gap: 4px; }
+.equip-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.equip-name strong { font-size: 1rem; }
+.equip-price { font-size: .9rem; }
+.equip-meta { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--c-muted); font-size: .82rem; line-height: 1.5; }
+.equip-meta .sep { color: #CBD5E1; }
+.equip-free { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; color: #92400E; font-size: .82rem; font-weight: 600; }
+.qty { border-width: 1px; border-radius: var(--radius); }
+.points-toggle { border-radius: var(--radius); border-style: solid; border-width: 1px; padding: 12px 14px; }

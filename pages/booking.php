@@ -218,17 +218,22 @@ include '../includes/head.php';
                             <?php foreach ($equipment as $eq): $free = (int) $eq['member_free_units']; ?>
                             <li class="equip" data-eq="<?= $eq['eq_id'] ?>">
                                 <div class="equip-info">
-                                    <strong><?= htmlspecialchars(localized($eq, 'eq_name', 'name_th')) ?></strong>
-                                    <span class="equip-price"><?= e('booking.per_unit', ['price' => formatPrice($eq['price'])]) ?></span>
+                                    <div class="equip-name">
+                                        <strong><?= htmlspecialchars(localized($eq, 'eq_name', 'name_th')) ?></strong>
+                                        <span class="equip-price"><?= e('booking.per_unit', ['price' => formatPrice($eq['price'])]) ?></span>
+                                    </div>
                                     <?php if ($note = localized($eq, 'unit_note', 'unit_note_th')): ?>
-                                        <span class="hint"><?= htmlspecialchars($note) ?></span>
+                                        <span class="equip-meta"><?= htmlspecialchars($note) ?></span>
                                     <?php endif; ?>
-                                    <span class="equip-fine"><?= icon('alert', 13) ?> <?= e('booking.fine', ['amount' => formatPrice($eq['fine_amount'])]) ?></span>
-                                    <span class="hint" data-eq-limit><?= e('booking.max_per_court', ['n' => maxPerCourt($eq)]) ?></span>
+                                    <span class="equip-meta">
+                                        <span data-eq-limit><?= e('booking.max_per_court', ['n' => maxPerCourt($eq)]) ?></span>
+                                        <span class="sep">·</span>
+                                        <span class="text-danger"><?= e('booking.fine', ['amount' => formatPrice($eq['fine_amount'])]) ?></span>
+                                    </span>
                                     <?php if ($isMember && $free > 0): ?>
-                                        <span class="badge badge-gold"><?= icon('gift', 12) ?> <?= e('booking.free_units', ['n' => $free]) ?></span>
+                                        <span class="equip-free"><?= icon('gift', 14) ?> <?= e('booking.free_units', ['n' => $free]) ?></span>
                                     <?php elseif (!$isMember && $free > 0): ?>
-                                        <span class="hint"><?= icon('crown', 12) ?> <?= e('booking.member_free_units', ['n' => $free]) ?></span>
+                                        <span class="equip-meta"><?= icon('crown', 13) ?> <?= e('booking.member_free_units', ['n' => $free]) ?></span>
                                     <?php endif; ?>
                                 </div>
                                 <div class="qty">

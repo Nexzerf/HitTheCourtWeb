@@ -30,3 +30,18 @@
     .res-cols { grid-template-columns: minmax(0, 1fr); }
     .res-actions .btn { flex: 1 1 auto; }
 }
+
+/* วันที่: กล่องสีอ่อน อ่านง่าย ไม่ใช้ไล่สี */
+.res-card { grid-template-columns: 104px minmax(0, 1fr); }
+.res-date { background: #F1F5F9; color: var(--c-ink); border-right: 1px solid var(--c-border); padding: 20px 10px; gap: 6px; }
+.res-day { font-size: 1.9rem; }
+.res-month { font-size: .78rem; color: var(--c-muted); opacity: 1; }
+.res-main { padding: 20px 24px; }
+.res-main .row-between { align-items: flex-start; }
+.res-main h3 { margin: 0; line-height: 1.4; }
+.res-actions { margin-top: 16px; gap: 10px; }
+@media (max-width: 640px) {
+    .res-card { grid-template-columns: minmax(0, 1fr); }
+    .res-date { border-right: 0; border-bottom: 1px solid var(--c-border); padding: 12px 18px; }
+    .res-main { padding: 16px 18px; }
+}

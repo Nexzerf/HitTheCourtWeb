@@ -32,7 +32,7 @@ include '../includes/admin_layout_top.php';
     <a class="card kpi" href="<?= SITE_URL ?>/admin/bookings.php?status=pending" style="text-decoration:none"><div class="kpi-label"><?= icon('clock', 16) ?> <?= e('status.awaiting_payment') ?></div><div class="kpi-value"><?= $kpi['pending'] ?></div></a>
 </div>
 
-<div class="grid grid-2">
+<div class="grid grid-2 dash-grid">
     <section class="card">
         <div class="card-head"><h2><?= icon('clock', 18) ?> <?= e('admin.today_schedule') ?></h2><a class="btn btn-ghost btn-sm" href="<?= SITE_URL ?>/admin/bookings.php?date=<?= $today ?>"><?= e('admin.view_all') ?></a></div>
         <?php if (!$todayBookings): ?><div class="empty"><?= icon('calendar', 40) ?><p class="mb-0"><?= e('admin.no_today') ?></p></div>

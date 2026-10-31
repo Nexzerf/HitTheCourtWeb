@@ -117,3 +117,78 @@
     .adm-item > summary { grid-template-columns: minmax(0, 1fr) auto 20px; }
     .adm-item > summary > div:nth-child(2) { grid-column: 1; grid-row: 2; }
 }
+
+/* ---------- Refinement ---------- */
+.admin-content { padding: clamp(18px, 3vw, 36px); }
+.admin-top { padding: 16px clamp(18px, 3vw, 36px); background: #fff; }
+.admin-nav a, .admin-side-foot a { border-radius: 8px; }
+.kpis { grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 16px; margin-bottom: 28px; }
+.kpi { padding: 20px 22px; }
+.kpi-label { font-size: .84rem; line-height: 1.4; }
+.kpi-value { margin-top: 10px; font-size: 1.75rem; }
+.kpi-sub { margin-top: 4px; display: block; }
+@media (max-width: 640px) {
+    .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .kpi { padding: 16px; }
+    .kpi-value { font-size: 1.45rem; }
+}
+
+/* ตัวกรอง: กริดเท่ากันทุกช่อง ปุ่มอยู่บรรทัดเดียวกัน */
+.filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; align-items: end; margin-bottom: 20px; }
+.filters .field { margin: 0 !important; gap: 8px; }
+.filters .input, .filters .select { height: 44px; min-height: 44px; }
+.filter-actions { display: flex; gap: 8px; align-items: center; }
+.filter-actions .btn { height: 44px; min-height: 44px; }
+@media (max-width: 640px) { .filter-actions .btn-primary { flex: 1; } }
+
+.adm-list { gap: 12px; }
+.adm-item > summary { padding: 16px 20px; }
+.adm-body { padding: 22px; gap: 24px; }
+.adm-actions { padding: 0 22px 22px; gap: 10px; }
+.card-head .meta { justify-content: flex-end; font-size: .85rem; }
+@media (max-width: 640px) { .card-head { flex-wrap: wrap; } .card-head .meta { justify-content: flex-start; } }
+
+/* หน้ากีฬาและอุปกรณ์ */
+.sport-settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+.sport-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 12px; align-items: end; }
+.sport-form .field + .field { margin-top: 0; }
+.court-chip { border-radius: 8px; padding: 7px 12px; }
+.eq-list { display: grid; gap: 12px; }
+.eq-item { padding: 18px 20px; border: 1px solid var(--c-border); border-radius: var(--radius); background: #fff; }
+.eq-item.is-new { background: #F8FAFC; border-style: dashed; }
+.eq-new-title { display: flex; align-items: center; gap: 6px; margin: 0 0 12px !important; color: var(--c-ink); font-weight: 600; }
+.eq-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1.4fr)) repeat(4, minmax(0, 1fr)); gap: 12px; }
+.eq-fields .field + .field { margin-top: 0; }
+.eq-fields .label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.eq-fields .input { min-height: 40px; padding: 8px 12px; font-size: .95rem; }
+.eq-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--c-border); }
+/* จอกลาง: ชื่อ 3 ช่องแถวแรก ตัวเลข 4 ช่องแถวที่สอง */
+@media (max-width: 1280px) {
+    .eq-fields { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+    .eq-fields .eq-wide { grid-column: span 4; }
+    .eq-fields .field:not(.eq-wide) { grid-column: span 3; }
+}
+@media (max-width: 1100px) { .sport-settings { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 640px) {
+    .sport-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .sport-form .btn { grid-column: 1 / -1; }
+    .eq-item { padding: 16px; }
+    .eq-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .eq-fields .eq-wide { grid-column: 1 / -1; }
+    .eq-fields .field:not(.eq-wide) { grid-column: auto; }
+}
+
+/* กราฟ */
+.bars, .cols-chart { margin-top: 20px; }
+.bars { gap: 14px; }
+.bar-track { height: 10px; }
+.bar-fill { background: var(--c-primary); }
+.cols-chart .col span.b { background: var(--c-primary); border-radius: 4px 4px 0 0; }
+.card-pad > h3.row { margin-bottom: 0; }
+/* แถบเมนูซ้ายยาวเต็มหน้า (จอใหญ่) */
+@media (min-width: 901px) { .admin-shell { background: linear-gradient(to right, var(--c-ink) 248px, var(--c-bg) 248px); } }
+.card-head { flex-wrap: nowrap; }
+.card-head > h2, .card-head > h3 { flex: 1 1 auto; min-width: 0; }
+.card-head:has(> .meta) { flex-wrap: wrap; }
+@media (max-width: 640px) { .kpis { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); } }
+.dash-grid { align-items: start; }

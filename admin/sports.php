@@ -76,16 +76,16 @@ include '../includes/admin_layout_top.php';
         </div>
     </div>
     <div class="card-body">
-        <div class="grid grid-2 mb-3">
-            <form method="POST" class="row" style="align-items:flex-end">
+        <div class="sport-settings">
+            <form method="POST" class="sport-form">
                 <?= csrfField() ?><input type="hidden" name="action" value="sport_update"><input type="hidden" name="sport_id" value="<?= $sid ?>">
-                <div class="field"><label class="label small"><?= e('admin.price_round') ?></label><input class="input" type="number" name="price" min="1" value="<?= (int) $s['price'] ?>" style="max-width:140px"></div>
-                <div class="field"><label class="label small"><?= e('admin.status') ?></label>
-                    <select class="select" name="status" style="width:auto"><option value="active"><?= e('admin.shown') ?></option><option value="inactive" <?= $s['status'] !== 'active' ? 'selected' : '' ?>><?= e('admin.hidden') ?></option></select></div>
-                <button class="btn btn-outline btn-sm" type="submit"><?= icon('check', 16) ?> <?= e('admin.save') ?></button>
+                <div class="field"><label class="label" for="price<?= $sid ?>"><?= e('admin.price_round') ?></label><input class="input" id="price<?= $sid ?>" type="number" name="price" min="1" value="<?= (int) $s['price'] ?>"></div>
+                <div class="field"><label class="label" for="status<?= $sid ?>"><?= e('admin.status') ?></label>
+                    <select class="select" id="status<?= $sid ?>" name="status"><option value="active"><?= e('admin.shown') ?></option><option value="inactive" <?= $s['status'] !== 'active' ? 'selected' : '' ?>><?= e('admin.hidden') ?></option></select></div>
+                <button class="btn btn-outline" type="submit"><?= icon('check', 16) ?> <?= e('admin.save') ?></button>
             </form>
             <div>
-                <p class="label small mb-1"><?= e('admin.courts_toggle') ?></p>
+                <p class="label mb-1"><?= e('admin.courts_toggle') ?></p>
                 <div class="court-chips">
                     <?php foreach ($courts[$sid] ?? [] as $c): $closed = $c['status'] !== 'available'; ?>
                     <form method="POST">
@@ -99,54 +99,53 @@ include '../includes/admin_layout_top.php';
             </div>
         </div>
 
-        <h3 class="row"><?= icon('box', 18) ?> <?= e('admin.equipment') ?></h3>
-        <div class="table-wrap">
-            <table class="table">
-                <thead><tr>
-                    <th><?= e('admin.eq_name') ?></th><th><?= e('admin.eq_name_th') ?></th><th><?= e('admin.eq_price') ?></th><th><?= e('admin.eq_stock') ?></th>
-                    <th><?= e('admin.eq_fine') ?></th><th><?= e('admin.eq_free') ?></th><th><?= e('admin.eq_per_court') ?></th><th></th>
-                </tr></thead>
-                <tbody>
-                <?php foreach ($equipment[$sid] ?? [] as $eq): $fid = 'eq' . $eq['eq_id']; ?>
-                    <tr>
-                        <td><input form="<?= $fid ?>" class="input input-sm input-name" name="eq_name" value="<?= htmlspecialchars($eq['eq_name']) ?>" required>
-                            <input form="<?= $fid ?>" class="input input-sm input-name mt-1" name="unit_note" value="<?= htmlspecialchars($eq['unit_note'] ?? '') ?>" placeholder="<?= e('admin.unit_note') ?>"></td>
-                        <td><input form="<?= $fid ?>" class="input input-sm input-name" name="name_th" value="<?= htmlspecialchars($eq['name_th'] ?? '') ?>"></td>
-                        <td><input form="<?= $fid ?>" class="input input-sm" type="number" min="0" name="price" value="<?= (int) $eq['price'] ?>"></td>
-                        <td><input form="<?= $fid ?>" class="input input-sm" type="number" min="0" name="stock" value="<?= (int) $eq['stock'] ?>"></td>
-                        <td><input form="<?= $fid ?>" class="input input-sm" type="number" min="0" name="fine_amount" value="<?= (int) $eq['fine_amount'] ?>"></td>
-                        <td><input form="<?= $fid ?>" class="input input-sm" type="number" min="0" name="member_free_units" value="<?= (int) $eq['member_free_units'] ?>"></td>
-                        <td class="strong"><?= maxPerCourt($eq) ?></td>
-                        <td>
-                            <form id="<?= $fid ?>" method="POST" class="row" style="flex-wrap:nowrap">
-                                <?= csrfField() ?><input type="hidden" name="action" value="eq_update"><input type="hidden" name="eq_id" value="<?= $eq['eq_id'] ?>"><input type="hidden" name="sport_id" value="<?= $sid ?>">
-                                <button class="btn btn-primary btn-sm" type="submit" title="<?= e('admin.save') ?>"><?= icon('check', 16) ?> <?= e('admin.save') ?></button>
-                            </form>
-                            <form method="POST" class="mt-1" data-confirm="<?= e('admin.confirm_delete_eq', ['name' => $eq['eq_name']]) ?>">
-                                <?= csrfField() ?><input type="hidden" name="action" value="eq_delete"><input type="hidden" name="eq_id" value="<?= $eq['eq_id'] ?>"><input type="hidden" name="sport_id" value="<?= $sid ?>">
-                                <button class="btn btn-danger-outline btn-sm" type="submit"><?= icon('minus', 16) ?> <?= e('admin.delete') ?></button>
-                            </form>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                    <tr class="add-row">
-                        <td><input form="add<?= $sid ?>" class="input input-sm input-name" name="eq_name" placeholder="<?= e('admin.new_equipment') ?>" required>
-                            <input form="add<?= $sid ?>" class="input input-sm input-name mt-1" name="unit_note" placeholder="<?= e('admin.unit_note') ?>"></td>
-                        <td><input form="add<?= $sid ?>" class="input input-sm input-name" name="name_th" placeholder="<?= e('admin.eq_name_th') ?>"></td>
-                        <td><input form="add<?= $sid ?>" class="input input-sm" type="number" min="0" name="price" value="0"></td>
-                        <td><input form="add<?= $sid ?>" class="input input-sm" type="number" min="0" name="stock" value="0"></td>
-                        <td><input form="add<?= $sid ?>" class="input input-sm" type="number" min="0" name="fine_amount" value="50"></td>
-                        <td><input form="add<?= $sid ?>" class="input input-sm" type="number" min="0" name="member_free_units" value="0"></td>
-                        <td class="muted">–</td>
-                        <td><form id="add<?= $sid ?>" method="POST">
-                            <?= csrfField() ?><input type="hidden" name="action" value="eq_add"><input type="hidden" name="sport_id" value="<?= $sid ?>">
-                            <button class="btn btn-dark btn-sm" type="submit"><?= icon('plus', 16) ?> <?= e('admin.add') ?></button>
-                        </form></td>
-                    </tr>
-                </tbody>
-            </table>
+        <h3 class="section-title"><?= icon('box', 18) ?> <?= e('admin.equipment') ?></h3>
+        <div class="eq-list">
+        <?php
+        $eqRows = $equipment[$sid] ?? [];
+        $eqRows[] = null; // แถวสุดท้าย = เพิ่มอุปกรณ์ใหม่
+        foreach ($eqRows as $eq):
+            $isNew = $eq === null;
+            $fid = $isNew ? 'add' . $sid : 'eq' . $eq['eq_id'];
+            $v = fn($k, $d = '') => htmlspecialchars((string) ($eq[$k] ?? $d));
+        ?>
+            <div class="eq-item<?= $isNew ? ' is-new' : '' ?>">
+                <?php if ($isNew): ?><p class="eq-new-title"><?= icon('plus', 16) ?> <?= e('admin.new_equipment') ?></p><?php endif; ?>
+                <div class="eq-fields">
+                    <div class="field eq-wide"><label class="label small"><?= e('admin.eq_name') ?></label>
+                        <input form="<?= $fid ?>" class="input" name="eq_name" value="<?= $v('eq_name') ?>" required></div>
+                    <div class="field eq-wide"><label class="label small"><?= e('admin.eq_name_th') ?></label>
+                        <input form="<?= $fid ?>" class="input" name="name_th" value="<?= $v('name_th') ?>"></div>
+                    <div class="field eq-wide"><label class="label small"><?= e('admin.unit_note') ?></label>
+                        <input form="<?= $fid ?>" class="input" name="unit_note" value="<?= $v('unit_note') ?>"></div>
+                    <div class="field"><label class="label small"><?= e('admin.eq_price') ?></label>
+                        <input form="<?= $fid ?>" class="input" type="number" min="0" name="price" value="<?= $v('price', '0') ?>"></div>
+                    <div class="field"><label class="label small"><?= e('admin.eq_stock') ?></label>
+                        <input form="<?= $fid ?>" class="input" type="number" min="0" name="stock" value="<?= $v('stock', '0') ?>"></div>
+                    <div class="field"><label class="label small"><?= e('admin.eq_fine') ?></label>
+                        <input form="<?= $fid ?>" class="input" type="number" min="0" name="fine_amount" value="<?= $v('fine_amount', '50') ?>"></div>
+                    <div class="field"><label class="label small"><?= e('admin.eq_free') ?></label>
+                        <input form="<?= $fid ?>" class="input" type="number" min="0" name="member_free_units" value="<?= $v('member_free_units', '0') ?>"></div>
+                </div>
+                <div class="eq-foot">
+                    <span class="muted small"><?= e('admin.eq_per_court') ?>: <strong class="text-ink"><?= $isNew ? '–' : maxPerCourt($eq) ?></strong></span>
+                    <div class="row">
+                        <?php if (!$isNew): ?>
+                        <form method="POST" data-confirm="<?= e('admin.confirm_delete_eq', ['name' => $eq['eq_name']]) ?>">
+                            <?= csrfField() ?><input type="hidden" name="action" value="eq_delete"><input type="hidden" name="eq_id" value="<?= $eq['eq_id'] ?>"><input type="hidden" name="sport_id" value="<?= $sid ?>">
+                            <button class="btn btn-danger-outline btn-sm" type="submit"><?= icon('trash', 16) ?> <?= e('admin.delete') ?></button>
+                        </form>
+                        <?php endif; ?>
+                        <form id="<?= $fid ?>" method="POST">
+                            <?= csrfField() ?><input type="hidden" name="action" value="<?= $isNew ? 'eq_add' : 'eq_update' ?>"><?php if (!$isNew): ?><input type="hidden" name="eq_id" value="<?= $eq['eq_id'] ?>"><?php endif; ?><input type="hidden" name="sport_id" value="<?= $sid ?>">
+                            <button class="btn <?= $isNew ? 'btn-dark' : 'btn-primary' ?> btn-sm" type="submit"><?= icon($isNew ? 'plus' : 'check', 16) ?> <?= e($isNew ? 'admin.add' : 'admin.save') ?></button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        <?php endforeach; ?>
         </div>
-        <p class="hint mt-1 mb-0"><?= e('admin.per_court_hint') ?></p>
+        <p class="hint mt-2 mb-0"><?= e('admin.per_court_hint') ?></p>
     </div>
 </section>
 <?php endforeach; ?>
@@ -154,6 +153,5 @@ include '../includes/admin_layout_top.php';
 .guide-toc { display: flex; flex-wrap: wrap; gap: 8px; }
 .guide-toc a { padding: 6px 12px; border-radius: 999px; background: #F1F5F9; color: var(--c-ink) !important; font-size: .85rem; font-weight: 600; text-decoration: none; }
 section[id] { scroll-margin-top: 80px; }
-.add-row td { background: #F8FAFC; }
 </style>
 <?php include '../includes/admin_layout_bottom.php'; ?>

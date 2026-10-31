@@ -101,8 +101,10 @@ include '../includes/admin_layout_top.php';
             <option value="pending" <?= $statusFilter === 'pending' ? 'selected' : '' ?>><?= e('status.awaiting_payment') ?></option>
             <option value="cancelled" <?= $statusFilter === 'cancelled' ? 'selected' : '' ?>><?= e('status.cancelled') ?></option>
         </select></div>
-    <button class="btn btn-primary" type="submit"><?= icon('eye', 16) ?> <?= e('admin.filter') ?></button>
-    <a class="btn btn-ghost" href="<?= SITE_URL ?>/admin/bookings.php"><?= e('admin.clear') ?></a>
+    <div class="filter-actions">
+        <button class="btn btn-primary" type="submit"><?= icon('eye', 16) ?> <?= e('admin.filter') ?></button>
+        <a class="btn btn-ghost" href="<?= SITE_URL ?>/admin/bookings.php"><?= e('admin.clear') ?></a>
+    </div>
 </form>
 
 <p class="muted small"><?= e('admin.showing', ['n' => count($bookings), 'total' => $total]) ?></p>

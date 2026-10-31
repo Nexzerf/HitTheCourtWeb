@@ -36,7 +36,9 @@ include '../includes/admin_layout_top.php';
         <select class="select" id="type" name="type"><option value=""><?= e('admin.all') ?></option>
             <option value="member" <?= $type === 'member' ? 'selected' : '' ?>><?= e('profile.member') ?></option>
             <option value="regular" <?= $type === 'regular' ? 'selected' : '' ?>><?= e('member.regular') ?></option></select></div>
-    <button class="btn btn-primary" type="submit"><?= e('admin.filter') ?></button>
+    <div class="filter-actions">
+        <button class="btn btn-primary" type="submit"><?= e('admin.filter') ?></button>
+    </div>
 </form>
 <p class="muted small"><?= e('admin.users_count', ['n' => count($users)]) ?></p>
 <div class="card table-wrap">

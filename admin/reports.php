@@ -57,8 +57,10 @@ include '../includes/admin_layout_top.php';
         <select class="select" id="category" name="category"><option value=""><?= e('admin.all') ?></option>
             <?php foreach (array_keys($catIcons) as $c): ?><option value="<?= $c ?>" <?= $catFilter === $c ? 'selected' : '' ?>><?= e('report.cat_' . $c) ?></option><?php endforeach; ?>
         </select></div>
-    <button class="btn btn-primary" type="submit"><?= e('admin.filter') ?></button>
-    <a class="btn btn-ghost" href="<?= SITE_URL ?>/admin/reports.php"><?= e('admin.clear') ?></a>
+    <div class="filter-actions">
+        <button class="btn btn-primary" type="submit"><?= e('admin.filter') ?></button>
+        <a class="btn btn-ghost" href="<?= SITE_URL ?>/admin/reports.php"><?= e('admin.clear') ?></a>
+    </div>
 </form>
 
 <?php if (!$reports): ?><div class="card empty"><?= icon('message', 44) ?><h3><?= e('report.empty') ?></h3></div><?php endif; ?>
@@ -79,24 +81,24 @@ include '../includes/admin_layout_top.php';
                     <span><?= icon('file', 14) ?> <?= htmlspecialchars($r['report_code']) ?></span>
                 </div>
                 <p class="report-text"><?= nl2br(htmlspecialchars($r['description'])) ?></p>
-                <form method="POST" class="row" style="align-items:flex-end">
+                <form method="POST" class="report-form">
                     <?= csrfField() ?><input type="hidden" name="action" value="update"><input type="hidden" name="report_id" value="<?= $r['report_id'] ?>">
-                    <div class="field" style="flex:2 1 260px"><label class="label small"><?= e('report.reply') ?></label>
-                        <input class="input" name="admin_notes" value="<?= htmlspecialchars($r['admin_notes'] ?? '') ?>" style="min-height:38px"></div>
+                    <div class="field report-reply"><label class="label small"><?= e('report.reply') ?></label>
+                        <input class="input" name="admin_notes" value="<?= htmlspecialchars($r['admin_notes'] ?? '') ?>"></div>
                     <div class="field"><label class="label small"><?= e('admin.status') ?></label>
-                        <select class="select" name="status" style="min-height:38px">
+                        <select class="select" name="status">
                             <?php foreach (['new', 'in_progress', 'resolved'] as $st): ?><option value="<?= $st ?>" <?= $r['status'] === $st ? 'selected' : '' ?>><?= e('report.status_' . $st) ?></option><?php endforeach; ?>
                         </select></div>
-                    <button class="btn btn-primary btn-sm" type="submit"><?= icon('refresh', 16) ?> <?= e('admin.update') ?></button>
+                    <button class="btn btn-primary" type="submit"><?= icon('refresh', 16) ?> <?= e('admin.update') ?></button>
                 </form>
-                <form method="POST" class="mt-1" data-confirm="<?= e('admin.confirm_delete_report') ?>">
+                <form method="POST" class="mt-2" data-confirm="<?= e('admin.confirm_delete_report') ?>">
                     <?= csrfField() ?><input type="hidden" name="action" value="delete"><input type="hidden" name="report_id" value="<?= $r['report_id'] ?>">
                     <button class="btn btn-danger-outline btn-sm" type="submit"><?= icon('trash', 16) ?> <?= e('admin.delete') ?></button>
                 </form>
             </div>
             <div>
                 <?php if ($r['image_path']): ?>
-                    <a href="<?= SITE_URL ?>/<?= htmlspecialchars($r['image_path']) ?>" target="_blank" rel="noopener"><img class="slip-thumb" src="<?= SITE_URL ?>/<?= htmlspecialchars($r['image_path']) ?>" alt="<?= e('report.photo') ?>" loading="lazy"></a>
+                    <a href="<?= SITE_URL ?>/<?= htmlspecialchars($r['image_path']) ?>" target="_blank" rel="noopener"><img class="slip-thumb" src="<?= SITE_URL ?>/<?= htmlspecialchars($r['image_path']) ?>" alt="<?= e('report.photo') ?>" loading="lazy" onerror="this.parentNode.outerHTML='<p class=&quot;muted small&quot;><?= e('admin.no_photo') ?></p>'"></a>
                 <?php else: ?><p class="muted small"><?= icon('image', 16) ?> <?= e('admin.no_photo') ?></p><?php endif; ?>
             </div>
         </div>
@@ -104,9 +106,15 @@ include '../includes/admin_layout_top.php';
 <?php endforeach; ?>
 </div>
 <style>
-.adm-report { display: grid; grid-template-columns: minmax(0, 1fr) 240px; gap: 20px; }
-.report-ico { display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; background: #F1F5F9; }
-.report-text { padding: 12px 14px; border-radius: 12px; background: #F8FAFC; }
-@media (max-width: 760px) { .adm-report { grid-template-columns: minmax(0, 1fr); } }
+.adm-report { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 28px; }
+.report-ico { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: #F1F5F9; flex-shrink: 0; }
+.report-text { margin: 0 0 20px; padding: 14px 16px; border-radius: 8px; background: #F8FAFC; border: 1px solid var(--c-border); white-space: normal; }
+.report-form { display: grid; grid-template-columns: minmax(0, 1fr) 180px auto; gap: 12px; align-items: end; }
+.report-form .field + .field { margin-top: 0; }
+@media (max-width: 760px) {
+    .adm-report { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    .report-form { grid-template-columns: minmax(0, 1fr) auto; }
+    .report-form .report-reply { grid-column: 1 / -1; }
+}
 </style>
 <?php include '../includes/admin_layout_bottom.php'; ?>
