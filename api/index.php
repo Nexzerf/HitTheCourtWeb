@@ -28,7 +28,7 @@ $prettyRoutes = [
 ];
 
 // ไฟล์ที่ห้ามเรียกตรง ๆ จากเบราว์เซอร์
-$blocked = ['config.php', 'config.local.php', 'config.local.example.php', 'api/index.php', 'api/thunder_api.php'];
+$blocked = ['config.php', 'config.local.php', 'config.local.example.php', 'api/index.php', 'api/thunder_api.php', 'api/promptpay.php'];
 
 $script = null;
 if (isset($prettyRoutes[$path])) {

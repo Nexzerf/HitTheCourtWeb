@@ -6,6 +6,8 @@ requireLogin();
 // เรียกใช้ Thunder API Helper
 // ตัวนี้คือไฟล์ช่วยเหลือสำหรับเรียก API ตัวนอก (เจ้า Thunder) มาใช้งาน
 require_once '../api/thunder_api.php';
+// ตัวสร้าง QR พร้อมเพย์ (สร้างเองในเครื่อง ไม่ต้องเรียก API)
+require_once '../api/promptpay.php';
 
  // ดึงเลข ID ของสมาชิกที่ส่งมาทาง URL (GET) แล้วแปลงเป็นตัวเลขให้เรียบร้อย
  $membershipId = intval($_GET['id'] ?? 0);
@@ -55,81 +57,67 @@ while ($row = $settingsStmt->fetch()) { $settings[$row['setting_key']] = $row['s
 
 // --- Generate QR Code (Using logic from pay_booking.php) ---
 // ส่วนนี้คือการสร้าง QR Code สำหรับจ่ายเงิน
- $qrDisplayUrl = null;
+ $qrPayload = null;
  $qrError = null;
  // เอาเบอร์พร้อมเพย์จาก Setting ที่ดึงมาเมื่อกี้
  $promptpayNumber = $settings['promptpay_number'] ?? '';
 
-// ถ้ามีเบอร์พร้อมเพย์นะ
+// ถ้ามีเบอร์พร้อมเพย์ ก็สร้างข้อมูล QR (หน้าเว็บจะวาดเป็นรูปให้)
 if (!empty($promptpayNumber)) {
-    // เช็คว่ามี API Key สำหรับเรียก Thunder API ไหม
-    $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
-    
-    // ถ้ามี Key
-    if ($apiKey) {
-        try {
-            // เรียกใช้งาน Thunder Client
-            $client = new ThunderClient($apiKey);
-            // ใช้ยอด 49 ในการสร้าง QR โดยใส่ ref ว่า MEM ตามด้วย ID
-            $result = $client->generateQR($fixedAmount, 'MEM' . $membershipId, $promptpayNumber);
-            // แปลงรูป QR ที่ได้มาเป็น base64 เพื่อแสดงผลได้เลย
-            $qrDisplayUrl = 'data:image/png;base64,' . $result['qr_image'];
-        } catch (Exception $e) {
-            // ถ้าเรียก API ไม่สำเร็จก็เก็บ Error ไว้
-            $qrError = "Thunder API Error: " . $e->getMessage();
-        }
-    }
-
-    // Fallback: promptpay.io
-    // ถ้าไม่มี API หรือสร้าง QR ไม่ได้ ก็สลับไปใช้บริการฟรีอย่าง promptpay.io แทน
-    if (empty($qrDisplayUrl)) {
-        $qrDisplayUrl = "https://promptpay.io/" . $promptpayNumber . "/" . $fixedAmount . ".png";
-    }
+    $qrPayload = promptpayPayload($promptpayNumber, $fixedAmount);
 } else {
-    // Fallback ถ้าไม่มีเบอร์ PromptPay ในระบบ
-    // ก็จะสร้าง QR แบบ Generic ขึ้นมาแทน (เผื่อใช้นะ)
-    $qrDisplayUrl = "https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=00020101021129370016A0000006770101110113006612345678905802TH53037645403" . $fixedAmount . "6304ABCD";
+    $qrError = "PromptPay number not set.";
 }
 
 // --- Handle Upload & Verification ---
 // ส่วนนี้คือตอนที่ผู้ใช้กดปุ่ม "ยืนยัน" พร้อมอัปโหลดสลิป
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // เช็คก่อนว่าอัปโหลดไฟล์มาไหม ถ้าไม่มีก็โยน Error ทิ้ง
-        if (empty($_FILES['slip']['name'])) throw new Exception("Please upload your payment slip");
+        $hasSlip = !empty($_FILES['slip']['name']);
+        // โหมดจริงต้องมีสลิป ส่วนโหมดสาธิตไม่บังคับ
+        if (!$hasSlip && PAYMENT_MODE !== 'demo') throw new Exception("Please upload your payment slip");
 
-        $file = $_FILES['slip'];
-        $allowedTypes = ['image/jpeg', 'image/png'];
+        $upload = null;
+        if ($hasSlip) {
+            $file = $_FILES['slip'];
+            $allowedTypes = ['image/jpeg', 'image/png'];
         
-        // เช็คชนิดไฟล์ รับแค่ JPG, PNG
-        if (!in_array($file['type'], $allowedTypes)) throw new Exception('Invalid file type. Please upload JPG or PNG');
-        // เช็คขนาดไฟล์ ห้ามเกิน 5MB
-        if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large. Maximum 5MB');
+            // เช็คชนิดไฟล์ รับแค่ JPG, PNG
+            if (!in_array($file['type'], $allowedTypes)) throw new Exception('Invalid file type. Please upload JPG or PNG');
+            // เช็คขนาดไฟล์ ห้ามเกิน 5MB
+            if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large. Maximum 5MB');
 
-        // ตั้งชื่อไฟล์ใหม่ให้สวยงาม มี ID และเวลา
-        $filename = 'mem_' . $membershipId . '_' . time() . '.jpg';
+            // ตั้งชื่อไฟล์ใหม่ให้สวยงาม มี ID และเวลา
+            $filename = 'mem_' . $membershipId . '_' . time() . '.jpg';
         
-        // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า) ถ้าไม่สำเร็จก็โยน Error
-        $upload = saveUploadedFile($file, 'slips', $filename);
-        if (!$upload) throw new Exception('Failed to upload file.');
-        $targetFile = $upload['local'];
+            // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า) ถ้าไม่สำเร็จก็โยน Error
+            $upload = saveUploadedFile($file, 'slips', $filename);
+            if (!$upload) throw new Exception('Failed to upload file.');
+        }
 
-        // --- CALL VERIFY API ---
-        // ตอนนี้ถึงเวลาเอาสลิปไปให้ AI อ่านแล้ว (Verify)
-        $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
-        if (empty($apiKey)) throw new Exception("API Key not configured.");
+        if (PAYMENT_MODE === 'demo') {
+            // โหมดสาธิต: ไม่ได้จ่ายเงินจริง ถือว่าจ่ายครบตามยอด
+            $paidAmount = $fixedAmount;
+        } else {
+            $targetFile = $upload['local'];
 
-        $client = new ThunderClient($apiKey);
-        // ส่งรูปภาพไปให้ API ตรวจสอบ
-        $slipData = $client->verifyByImage($targetFile);
+            // --- CALL VERIFY API ---
+            // ตอนนี้ถึงเวลาเอาสลิปไปให้ AI อ่านแล้ว (Verify)
+            $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
+            if (empty($apiKey)) throw new Exception("API Key not configured.");
+
+            $client = new ThunderClient($apiKey);
+            // ส่งรูปภาพไปให้ API ตรวจสอบ
+            $slipData = $client->verifyByImage($targetFile);
         
-        // ดึงยอดเงินที่ API อ่านได้ออกมา
-        $paidAmount = floatval($slipData['amount']['amount'] ?? 0);
+            // ดึงยอดเงินที่ API อ่านได้ออกมา
+            $paidAmount = floatval($slipData['amount']['amount'] ?? 0);
         
-        // Logic: ตรวจสอบยอดเงินกับยอดที่ฟิกไว้ (49)
-        // ถ้ายอดที่โอนน้อยกว่ายอดที่กำหนด ก็ถือว่าผิดพลาด
-        if ($paidAmount < $fixedAmount) {
-            throw new Exception("Amount mismatch. Required: {$fixedAmount}, Transferred: {$paidAmount}");
+            // Logic: ตรวจสอบยอดเงินกับยอดที่ฟิกไว้ (49)
+            // ถ้ายอดที่โอนน้อยกว่ายอดที่กำหนด ก็ถือว่าผิดพลาด
+            if ($paidAmount < $fixedAmount) {
+                throw new Exception("Amount mismatch. Required: {$fixedAmount}, Transferred: {$paidAmount}");
+            }
         }
 
                // --- SUCCESS: Update Database ---
@@ -139,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // 1. Update Membership Status
         // อัปเดตสถานะตาราง user_membership ว่า "verified" และเก็บที่อยู่รูปสลิป
         $stmt = $pdo->prepare("UPDATE user_membership SET slip_image = ?, payment_status = 'verified' WHERE id = ?");
-        $stmt->execute([$upload['path'], $membershipId]);
+        $stmt->execute([$upload['path'] ?? null, $membershipId]);
 
         // 2. Update User to Premium (is_member = 1)
         // FIX: ใช้ค่า end_date จากตาราง user_membership โดยตรง จะแม่นยำกว่าคำนวณใหม่
@@ -380,7 +368,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- หัวข้อหน้าจ่ายเงิน -->
             <div class="text-center mb-4">
                 <h1>Membership Payment</h1>
+                <?php if (PAYMENT_MODE === 'demo'): ?>
+                <p class="text-muted">Demo mode: no real payment needed. The QR below is a real PromptPay QR, but you can just press Confirm Payment.</p>
+                <?php else: ?>
                 <p class="text-muted">Scan QR to pay, then upload slip for auto-verification.</p>
+                <?php endif; ?>
             </div>
             
             <!-- ถ้ามี Error จากการตรวจสอบสลิป จะแสดงขึ้นมาตรงนี้ -->
@@ -423,9 +415,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <!-- QR Code -->
                             <!-- กล่องแสดง QR Code ให้แสกนจ่ายเงิน -->
                             <div class="qr-box mb-3">
-                                <?php if ($qrDisplayUrl): ?>
+                                <?php if ($qrPayload): ?>
                                     <div class="qr-image">
-                                        <img src="<?= $qrDisplayUrl ?>" alt="QR Code">
+                                        <img id="promptpay-qr" data-payload="<?= htmlspecialchars($qrPayload) ?>" alt="PromptPay QR Code">
                                     </div>
                                     <div class="text-success mb-2"><strong>Scan to Pay</strong></div>
                                     <p class="text-muted" style="font-size: 0.9rem;">
@@ -449,10 +441,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <!-- Upload Slip -->
                             <!-- ส่วนอัปโหลดสลิปโอนเงิน -->
                             <div class="mb-3" style="margin-top: 1.5rem;">
-                                <label class="form-label"><strong>Upload Payment Slip</strong></label>
+                                <label class="form-label"><strong>Upload Payment Slip</strong><?= PAYMENT_MODE === 'demo' ? ' <span class="text-muted">(optional in demo mode)</span>' : '' ?></label>
                                 <!-- พื้นที่กดอัปโหลด (แหงนๆ คือกดแล้วเลือกไฟล์) -->
                                 <div class="upload-zone" onclick="document.getElementById('slip-upload').click()">
-                                    <input type="file" name="slip" id="slip-upload" accept=".jpg,.jpeg,.png" required style="display: none;">
+                                    <input type="file" name="slip" id="slip-upload" accept=".jpg,.jpeg,.png" <?= PAYMENT_MODE === 'demo' ? '' : 'required' ?> style="display: none;">
                                     <div class="upload-icon" style="color: var(--primary);">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -475,6 +467,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </main>
+
+    <!-- วาดรูป QR พร้อมเพย์จากข้อมูลที่ PHP สร้างไว้ -->
+    <script src="<?= SITE_URL ?>/assets/js/qrcode.js"></script>
+    <script>
+        (function () {
+            var img = document.getElementById('promptpay-qr');
+            if (!img) return;
+            var qr = qrcode(0, 'M');
+            qr.addData(img.dataset.payload);
+            qr.make();
+            img.src = qr.createDataURL(6, 4);
+        })();
+    </script>
 
     <script>
         // Script สำหรับแสดงชื่อไฟล์เมื่อเลือกรูป

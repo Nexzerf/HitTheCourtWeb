@@ -36,7 +36,8 @@ Import repo นี้ที่ https://vercel.com/new (Framework Preset: **Other
 | `DB_USER` | | |
 | `DB_PASS` | | |
 | `DB_SSL` | `1` | ฐานข้อมูลบนคลาวด์ส่วนใหญ่บังคับ SSL |
-| `THUNDER_API_KEY` | | ใช้สร้าง QR และตรวจสลิป |
+| `PAYMENT_MODE` | `demo` | `demo` (ค่าเริ่มต้น) = แสดง QR พร้อมเพย์แต่ไม่ต้องจ่ายจริง กดยืนยันได้เลย / `thunder` = ตรวจสลิปจริง |
+| `THUNDER_API_KEY` | | ใช้เมื่อ `PAYMENT_MODE=thunder` เท่านั้น |
 | `SITE_URL` | `https://hitthecourt.vercel.app` | ไม่บังคับ ถ้าไม่ตั้งจะใช้โดเมนที่เข้ามาจริง |
 | `APP_DEBUG` | `1` | ไม่บังคับ เปิดแสดง Error ชั่วคราวตอนแก้ปัญหา |
 

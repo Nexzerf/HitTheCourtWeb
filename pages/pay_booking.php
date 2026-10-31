@@ -5,6 +5,8 @@ require_once '../config.php';
 requireLogin();
 // เรียกใช้ไฟล์ช่วยเหลือสำหรับเชื่อมต่อ API ตัวนอก (Thunder API)
 require_once '../api/thunder_api.php';
+// ตัวสร้าง QR พร้อมเพย์ (สร้างเองในเครื่อง ไม่ต้องเรียก API)
+require_once '../api/promptpay.php';
 
 // 1. Get Booking ID
 // ดึงเลข ID การจองจาก URL (?) ถ้าไม่มีก็ส่งกลับไปหน้ารายการจองเลย
@@ -56,7 +58,7 @@ while ($row = $settingsStmt->fetch()) { $settings[$row['setting_key']] = $row['s
 
 // เตรียมตัวแปรไว้เก็บ Error และรูป QR Code
  $errors = [];
- $qrDisplayUrl = null; 
+ $qrPayload = null;
  $qrError = null;
 
 // --- Generate QR ---
@@ -65,25 +67,9 @@ while ($row = $settingsStmt->fetch()) { $settings[$row['setting_key']] = $row['s
  // ดึงยอดเงินที่ต้องจ่ายจากข้อมูลการจอง
  $amount = floatval($booking['total_price']);
 
-// ถ้ามีเบอร์พร้อมเพย์ในระบบ
+// ถ้ามีเบอร์พร้อมเพย์ในระบบ ก็สร้างข้อมูล QR (หน้าเว็บจะวาดเป็นรูปให้)
 if (!empty($promptpayNumber)) {
-    $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
-    // ถ้ามี API Key
-    if ($apiKey) {
-        try {
-            // ลองเรียก Thunder API มาสร้าง QR ให้ (มี ref code ด้วย)
-            $client = new ThunderClient($apiKey);
-            $result = $client->generateQR($amount, $booking['booking_code'], $promptpayNumber);
-            $qrDisplayUrl = 'data:image/png;base64,' . $result['qr_image'];
-        } catch (Exception $e) {
-            // Ignore error, use fallback
-            // ถ้า API ดึง ก็ข้ามไปใช้วิธีสำรอง
-        }
-    }
-    // Fallback: ถ้าสร้างจาก API ไม่ได้ ก็ไปสร้างจาก promptpay.io (บริการฟรี) แทน
-    if (empty($qrDisplayUrl)) {
-        $qrDisplayUrl = "https://promptpay.io/" . $promptpayNumber . "/" . $amount . ".png";
-    }
+    $qrPayload = promptpayPayload($promptpayNumber, $amount);
 } else {
     // ถ้าไม่มีเบอร์พร้อมเพย์ในระบบ ก็แจ้ง Error
     $qrError = "PromptPay number not set.";
@@ -93,71 +79,82 @@ if (!empty($promptpayNumber)) {
 // ส่วนนี้คือตอนที่ผู้ใช้กดปุ่ม "ยืนยันการจ่ายเงิน" พร้อมอัปโหลดสลิป
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     try {
-        // เช็คว่าอัปโหลดไฟล์มาไหม
-        if (empty($_FILES['slip_image']['name'])) throw new Exception("Please upload your payment slip");
+        $hasSlip = !empty($_FILES['slip_image']['name']);
+        // โหมดจริงต้องมีสลิป ส่วนโหมดสาธิตไม่บังคับ
+        if (!$hasSlip && PAYMENT_MODE !== 'demo') throw new Exception("Please upload your payment slip");
 
-        $file = $_FILES['slip_image'];
-        // เช็คชนิดไฟล์ว่าเป็นรูปไหม
-        if (!in_array($file['type'], ['image/jpeg', 'image/png'])) throw new Exception('Invalid file type');
-        // เช็คขนาดไฟล์ ห้ามเกิน 5MB
-        if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large');
+        $upload = null;
+        if ($hasSlip) {
+            $file = $_FILES['slip_image'];
+            // เช็คชนิดไฟล์ว่าเป็นรูปไหม
+            if (!in_array($file['type'], ['image/jpeg', 'image/png'])) throw new Exception('Invalid file type');
+            // เช็คขนาดไฟล์ ห้ามเกิน 5MB
+            if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large');
 
-        // ตั้งชื่อไฟล์ใหม่ให้สวยงาม
-        $filename = 'bk_' . $bookingId . '_' . time() . '.jpg';
-        
-        // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า)
-        $upload = saveUploadedFile($file, 'slips', $filename);
-        if (!$upload) throw new Exception('Failed to upload file.');
-        $targetFile = $upload['local'];
+            // ตั้งชื่อไฟล์ใหม่ให้สวยงาม
+            $filename = 'bk_' . $bookingId . '_' . time() . '.jpg';
 
-        // เรียก API เพื่ออ่านข้อมูลจากสลิป
-        $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
-        if (empty($apiKey)) throw new Exception("API Key missing.");
-
-        $client = new ThunderClient($apiKey);
-        $slipData = $client->verifyByImage($targetFile);
-        
-        // --- VALIDATION ---
-        // ดึงยอดเงินที่อ่านได้จากสลิป กับยอดที่ต้องจ่ายจริง
-        $paidAmount = floatval($slipData['amount']['amount'] ?? 0);
-        $requiredAmount = floatval($booking['total_price']);
-        
-        // 1. Check Amount
-        // เช็คว่ายอดตรงไหม? ถ้าโอนน้อยกว่าที่ต้องจ่าย ก็ Error
-        if ($paidAmount < $requiredAmount) {
-            throw new Exception("Amount mismatch. Required: {$requiredAmount}, Transferred: {$paidAmount}");
+            // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า)
+            $upload = saveUploadedFile($file, 'slips', $filename);
+            if (!$upload) throw new Exception('Failed to upload file.');
         }
 
-        // 2. Check PromptPay Number (Logic เดียวกับ Membership)
-        // เช็คว่าโอนมาบัญชีที่ถูกต้องไหม?
-        // ทำการดึงค่าจากหลายๆ Key ที่เป็นไปได้ของ Thunder API (เผื่อมันชื่อต่างกัน)
-        $slipAccountValue = 
-            ($slipData['receiver']['account']['value'] ?? '') ?: 
-            ($slipData['receiver']['account']['id'] ?? '') ?: 
-            ($slipData['receiver']['account']['account_number'] ?? '') ?: 
-            ($slipData['receiver']['account']['proxy_value'] ?? '');
+        if (PAYMENT_MODE === 'demo') {
+            // --- DEMO ---
+            // โหมดสาธิต: ไม่ได้จ่ายเงินจริง ถือว่าจ่ายครบตามยอด
+            $paidAmount = floatval($booking['total_price']);
+        } else {
+            $targetFile = $upload['local'];
 
-        $expectedAccountValue = $settings['promptpay_number'] ?? '';
+            // เรียก API เพื่ออ่านข้อมูลจากสลิป
+            $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
+            if (empty($apiKey)) throw new Exception("API Key missing.");
 
-        // ตัดเครื่องหมายพิเศษออก เหลือแค่ตัวเลข เพื่อเปรียบเทียบง่ายๆ
-        $cleanSlipAcc = preg_replace('/[^0-9]/', '', $slipAccountValue);
-        $cleanExpectedAcc = preg_replace('/[^0-9]/', '', $expectedAccountValue);
-
-        // ถ้า API อ่านหมายเลขไม่ได้จริงๆ (พบว่างเปล่า) ให้ข้ามการตรวจสอบนี้ไป เพื่อไม่ให้ Error
-        // แต่ถ้าอ่านได้ และตัวเลขไม่ตรง ให้ Error (โอนผิดบัญชี)
-        if (!empty($cleanSlipAcc) && ($cleanSlipAcc !== $cleanExpectedAcc)) {
-             throw new Exception("Invalid recipient. Expected: '{$expectedAccountValue}', Found: '{$slipAccountValue}'");
-        }
+            $client = new ThunderClient($apiKey);
+            $slipData = $client->verifyByImage($targetFile);
         
-        // Optional: Log ถ้าหาก API ไม่ส่งค่าหมายเลขมา
-        // if (empty($cleanSlipAcc)) { error_log("API did not return account number for booking $bookingId"); }
+            // --- VALIDATION ---
+            // ดึงยอดเงินที่อ่านได้จากสลิป กับยอดที่ต้องจ่ายจริง
+            $paidAmount = floatval($slipData['amount']['amount'] ?? 0);
+            $requiredAmount = floatval($booking['total_price']);
+        
+            // 1. Check Amount
+            // เช็คว่ายอดตรงไหม? ถ้าโอนน้อยกว่าที่ต้องจ่าย ก็ Error
+            if ($paidAmount < $requiredAmount) {
+                throw new Exception("Amount mismatch. Required: {$requiredAmount}, Transferred: {$paidAmount}");
+            }
+
+            // 2. Check PromptPay Number (Logic เดียวกับ Membership)
+            // เช็คว่าโอนมาบัญชีที่ถูกต้องไหม?
+            // ทำการดึงค่าจากหลายๆ Key ที่เป็นไปได้ของ Thunder API (เผื่อมันชื่อต่างกัน)
+            $slipAccountValue = 
+                ($slipData['receiver']['account']['value'] ?? '') ?: 
+                ($slipData['receiver']['account']['id'] ?? '') ?: 
+                ($slipData['receiver']['account']['account_number'] ?? '') ?: 
+                ($slipData['receiver']['account']['proxy_value'] ?? '');
+
+            $expectedAccountValue = $settings['promptpay_number'] ?? '';
+
+            // ตัดเครื่องหมายพิเศษออก เหลือแค่ตัวเลข เพื่อเปรียบเทียบง่ายๆ
+            $cleanSlipAcc = preg_replace('/[^0-9]/', '', $slipAccountValue);
+            $cleanExpectedAcc = preg_replace('/[^0-9]/', '', $expectedAccountValue);
+
+            // ถ้า API อ่านหมายเลขไม่ได้จริงๆ (พบว่างเปล่า) ให้ข้ามการตรวจสอบนี้ไป เพื่อไม่ให้ Error
+            // แต่ถ้าอ่านได้ และตัวเลขไม่ตรง ให้ Error (โอนผิดบัญชี)
+            if (!empty($cleanSlipAcc) && ($cleanSlipAcc !== $cleanExpectedAcc)) {
+                 throw new Exception("Invalid recipient. Expected: '{$expectedAccountValue}', Found: '{$slipAccountValue}'");
+            }
+        
+            // Optional: Log ถ้าหาก API ไม่ส่งค่าหมายเลขมา
+            // if (empty($cleanSlipAcc)) { error_log("API did not return account number for booking $bookingId"); }
+        }
 
         // --- SUCCESS ---
         // ถ้าผ่านเงื่อนไขทั้งหมด ก็เริ่มอัปเดตฐานข้อมูล
         $pdo->beginTransaction();
         // 1. บันทึกประวัติการจ่ายเงิน
         $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, slip_image, payment_status, verified_at) VALUES (?, 'promptpay', ?, ?, 'verified', NOW())")
-            ->execute([$bookingId, $paidAmount, $upload['path']]);
+            ->execute([$bookingId, $paidAmount, $upload['path'] ?? null]);
         // 2. อัปเดตสถานะการจองเป็น 'paid'
         $pdo->prepare("UPDATE bookings SET payment_status = 'paid', expires_at = NULL WHERE booking_id = ?")->execute([$bookingId]);
         // 3. เพิ่มแต้มให้ User และนับจำนวนการจอง
@@ -381,7 +378,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <!-- หัวข้อหน้าจ่ายเงิน -->
             <div class="text-center mb-4">
                 <h1>Confirm & Pay</h1>
+                <?php if (PAYMENT_MODE === 'demo'): ?>
+                <p class="text-muted">Demo mode: no real payment needed. The QR below is a real PromptPay QR, but you can just press Confirm Payment.</p>
+                <?php else: ?>
                 <p class="text-muted">Scan QR to pay, then upload slip for auto-verification.</p>
+                <?php endif; ?>
 
             </div>
             
@@ -451,10 +452,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <!-- กล่อง QR Code -->
                             <div class="qr-box mb-3">
-                                <?php if ($qrDisplayUrl): ?>
+                                <?php if ($qrPayload): ?>
                                     <!-- แสดง QR Code -->
                                     <div class="qr-image">
-                                        <img src="<?= $qrDisplayUrl ?>" alt="QR Code">
+                                        <img id="promptpay-qr" data-payload="<?= htmlspecialchars($qrPayload) ?>" alt="PromptPay QR Code">
                                     </div>
                                     <div class="text-success mb-2"><strong>Scan to Pay</strong></div>
                                     <p class="text-muted" style="font-size: 0.9rem;">
@@ -480,10 +481,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             
                             <!-- ส่วนอัปโหลดสลิป -->
                             <div class="mb-3">
-                                <label class="form-label"><strong>Upload Payment Slip</strong></label>
+                                <label class="form-label"><strong>Upload Payment Slip</strong><?= PAYMENT_MODE === 'demo' ? ' <span class="text-muted">(optional in demo mode)</span>' : '' ?></label>
                                 <!-- พื้นที่กดอัปโหลด -->
                                 <div class="upload-zone" onclick="document.getElementById('slip-upload').click()">
-                                    <input type="file" name="slip_image" id="slip-upload" accept=".jpg,.jpeg,.png" required style="display: none;">
+                                    <input type="file" name="slip_image" id="slip-upload" accept=".jpg,.jpeg,.png" <?= PAYMENT_MODE === 'demo' ? '' : 'required' ?> style="display: none;">
                                     <div class="upload-icon" style="color: var(--primary);">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -506,6 +507,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         </div>
     </main>
+
+    <!-- วาดรูป QR พร้อมเพย์จากข้อมูลที่ PHP สร้างไว้ -->
+    <script src="<?= SITE_URL ?>/assets/js/qrcode.js"></script>
+    <script>
+        (function () {
+            var img = document.getElementById('promptpay-qr');
+            if (!img) return;
+            var qr = qrcode(0, 'M');
+            qr.addData(img.dataset.payload);
+            qr.make();
+            img.src = qr.createDataURL(6, 4);
+        })();
+    </script>
 
     <script>
         // Script เล็กน้อยสำหรับเวลาเลือกไฟล์แล้ว ให้เปลี่ยนชื่อไฟล์มาแสดงในกล่อง

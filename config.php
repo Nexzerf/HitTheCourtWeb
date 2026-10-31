@@ -76,6 +76,11 @@ define('UPLOAD_PATH', __DIR__ . '/uploads/');
 define('SESSION_DRIVER', env('SESSION_DRIVER', ON_VERCEL ? 'database' : 'file'));
 define('UPLOAD_DRIVER', env('UPLOAD_DRIVER', ON_VERCEL ? 'database' : 'file'));
 
+// PAYMENT MODE
+// demo    = โหมดสาธิต: แสดง QR พร้อมเพย์จริง แต่ไม่ต้องจ่ายเงิน กดยืนยันได้เลย (สลิปไม่บังคับ และไม่ตรวจสอบ)
+// thunder = ตรวจสลิปจริงผ่าน Thunder API (ต้องตั้ง THUNDER_API_KEY)
+define('PAYMENT_MODE', env('PAYMENT_MODE', 'demo'));
+
 // THUNDER API
 // กุญแจสำคัญสำหรับเรียกใช้งานบริการภายนอก (API) ที่ชื่อว่า Thunder
 define('THUNDER_API_KEY', env('THUNDER_API_KEY', ''));
