@@ -60,7 +60,7 @@ while ($row = $settingsStmt->fetch()) { $settings[$row['setting_key']] = $row['s
  $qrPayload = null;
  $qrError = null;
  // เอาเบอร์พร้อมเพย์จาก Setting ที่ดึงมาเมื่อกี้
- $promptpayNumber = $settings['promptpay_number'] ?? '';
+ $promptpayNumber = ($settings['promptpay_number'] ?? '') ?: '0951386174'; // เบอร์รับเงินพร้อมเพย์ (ใช้ค่าจาก settings ก่อน)
 
 // ถ้ามีเบอร์พร้อมเพย์ ก็สร้างข้อมูล QR (หน้าเว็บจะวาดเป็นรูปให้)
 if (!empty($promptpayNumber)) {

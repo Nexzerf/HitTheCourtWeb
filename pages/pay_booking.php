@@ -63,7 +63,7 @@ while ($row = $settingsStmt->fetch()) { $settings[$row['setting_key']] = $row['s
 
 // --- Generate QR ---
 // ส่วนของการสร้าง QR Code พร้อมเพย์
- $promptpayNumber = $settings['promptpay_number'] ?? '';
+ $promptpayNumber = ($settings['promptpay_number'] ?? '') ?: '0951386174'; // เบอร์รับเงินพร้อมเพย์ (ใช้ค่าจาก settings ก่อน)
  // ดึงยอดเงินที่ต้องจ่ายจากข้อมูลการจอง
  $amount = floatval($booking['total_price']);
 
@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ($slipData['receiver']['account']['account_number'] ?? '') ?: 
                 ($slipData['receiver']['account']['proxy_value'] ?? '');
 
-            $expectedAccountValue = $settings['promptpay_number'] ?? '';
+            $expectedAccountValue = $promptpayNumber;
 
             // ตัดเครื่องหมายพิเศษออก เหลือแค่ตัวเลข เพื่อเปรียบเทียบง่ายๆ
             $cleanSlipAcc = preg_replace('/[^0-9]/', '', $slipAccountValue);
