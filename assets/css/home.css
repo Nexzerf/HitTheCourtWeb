@@ -8,27 +8,118 @@
 
 /* ---------- Hero ---------- */
 .hero {
-    display: flex; align-items: center;
-    min-height: min(88vh, 760px);
-    padding: calc(var(--nav-h) + 40px) 0 56px;
-    background-size: cover; background-position: center;
+    position: relative;
+    overflow: hidden;
+    padding: calc(var(--nav-h) + clamp(32px, 6vw, 72px)) 0 clamp(48px, 7vw, 88px);
+    background:
+        radial-gradient(ellipse 60% 70% at 85% 30%, rgba(37, 99, 235, .45), transparent 70%),
+        radial-gradient(ellipse 50% 60% at 0% 100%, rgba(14, 165, 233, .18), transparent 70%),
+        linear-gradient(180deg, #0B1324 0%, #0F172A 100%);
     color: #CBD5E1;
 }
-.hero-inner { max-width: 1200px; }
-.hero-badge { background: rgba(255, 255, 255, .12) !important; backdrop-filter: blur(6px); }
-.hero-title {
-    margin: 16px 0 12px !important;
-    color: #fff !important;
-    font-size: clamp(2.8rem, 1.5rem + 6vw, 5.5rem) !important;
-    font-weight: 700; letter-spacing: -0.03em; line-height: 1 !important;
+/* เส้นสนามจาง ๆ เป็นลายพื้นหลัง */
+.hero::before {
+    content: '';
+    position: absolute; inset: 0;
+    background:
+        linear-gradient(rgba(255, 255, 255, .035) 1px, transparent 1px) 0 0 / 56px 56px,
+        linear-gradient(90deg, rgba(255, 255, 255, .035) 1px, transparent 1px) 0 0 / 56px 56px;
+    mask-image: radial-gradient(ellipse 80% 80% at 30% 40%, #000 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse 80% 80% at 30% 40%, #000 30%, transparent 75%);
+    pointer-events: none;
 }
-.hero-title span { color: #60A5FA; }
-.hero-sub { max-width: 46ch; font-size: clamp(1rem, .9rem + .4vw, 1.2rem); margin-bottom: 28px !important; }
-.hero-ghost { background: rgba(255, 255, 255, .1); color: #fff !important; border-color: rgba(255, 255, 255, .3); }
-.hero-ghost:hover { background: rgba(255, 255, 255, .18); }
-.hero-stats { display: flex; flex-wrap: wrap; gap: 16px clamp(20px, 5vw, 48px); list-style: none; margin: 40px 0 0; padding: 0; }
-.hero-stats strong { display: block; color: #fff; font-family: var(--font-display); font-size: clamp(1.8rem, 1.2rem + 2vw, 2.6rem); line-height: 1; }
-.hero-stats span { font-size: .85rem; }
+.hero-grid {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    gap: clamp(28px, 5vw, 64px);
+    align-items: center;
+}
+.hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 14px 6px 10px;
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .06);
+    color: #E2E8F0; font-size: .85rem; font-weight: 600;
+    backdrop-filter: blur(8px);
+}
+.hero-badge .icon { color: #60A5FA; }
+.hero-title {
+    margin: 20px 0 16px !important;
+    color: #fff !important;
+    font-size: clamp(2.8rem, 1.4rem + 5.4vw, 5.25rem) !important;
+    font-weight: 700; letter-spacing: -0.035em; line-height: .98 !important;
+}
+.hero-title span {
+    background: linear-gradient(90deg, #60A5FA, #38BDF8);
+    -webkit-background-clip: text; background-clip: text;
+    color: transparent;
+}
+.hero-sub { max-width: 44ch; color: #CBD5E1; font-size: clamp(1rem, .92rem + .4vw, 1.2rem); margin-bottom: 28px !important; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.hero-actions .btn-primary { box-shadow: 0 10px 30px rgba(37, 99, 235, .45); }
+.hero-ghost { background: rgba(255, 255, 255, .06); color: #fff !important; border-color: rgba(255, 255, 255, .22); }
+.hero-ghost:hover { background: rgba(255, 255, 255, .14); }
+.hero-stats {
+    display: flex; flex-wrap: wrap; gap: 16px clamp(24px, 4vw, 44px);
+    list-style: none; margin: 40px 0 0; padding: 24px 0 0;
+    border-top: 1px solid rgba(255, 255, 255, .1);
+}
+.hero-stats strong { display: block; color: #fff; font-family: var(--font-display); font-size: clamp(1.8rem, 1.2rem + 1.8vw, 2.5rem); line-height: 1; }
+.hero-stats span { display: block; margin-top: 6px; color: #94A3B8; font-size: .85rem; }
+
+/* รูปกีฬาด้านขวา */
+.hero-visual { position: relative; }
+.hero-photo {
+    position: relative;
+    border-radius: 28px;
+    overflow: hidden;
+    aspect-ratio: 4 / 3;
+    box-shadow: 0 30px 80px rgba(2, 6, 23, .6), 0 0 0 1px rgba(255, 255, 255, .08);
+    transform: rotate(-1.5deg);
+}
+.hero-photo img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 35% center; }
+.hero-photo::after {
+    /* กลืนขอบรูปให้เข้ากับพื้นหลังโทนน้ำเงิน */
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(200deg, transparent 40%, rgba(11, 19, 36, .55) 100%);
+}
+.hero-float {
+    position: absolute;
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, .96);
+    color: var(--c-ink);
+    box-shadow: 0 16px 40px rgba(2, 6, 23, .35);
+    animation: hero-float 6s ease-in-out infinite;
+}
+.hero-float strong { display: block; font-size: .98rem; line-height: 1.25; }
+.hero-float small { display: block; color: var(--c-muted); font-size: .78rem; }
+.hero-float-live { left: -24px; bottom: 28px; }
+.hero-float-price { right: -12px; top: 24px; animation-delay: -3s; }
+.float-ico { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 12px; background: var(--c-primary-soft); color: var(--c-primary); }
+.live-dot { position: relative; width: 12px; height: 12px; border-radius: 50%; background: #22C55E; flex-shrink: 0; }
+.live-dot::after { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid #22C55E; opacity: .5; animation: live-ping 1.8s ease-out infinite; }
+@keyframes hero-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
+@keyframes live-ping { from { transform: scale(.6); opacity: .7; } to { transform: scale(1.6); opacity: 0; } }
+
+@media (max-width: 960px) {
+    .hero-grid { grid-template-columns: minmax(0, 1fr); }
+    .hero-visual { max-width: 560px; width: 100%; margin: 8px auto 0; }
+    .hero-float-live { left: 8px; }
+    .hero-float-price { right: 8px; }
+}
+@media (max-width: 480px) {
+    .hero-photo { border-radius: 20px; transform: none; }
+    .hero-float { padding: 10px 12px; }
+    .hero-float strong { font-size: .88rem; }
+    .hero-float-price { top: 12px; }
+    .hero-float-live { bottom: 12px; }
+    .hero-actions .btn { flex: 1 1 auto; }
+}
 
 /* ---------- Sport tiles ---------- */
 .sport-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr)); gap: 14px; }

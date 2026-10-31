@@ -511,4 +511,9 @@ return [
     'admin.new_equipment' => 'New equipment name',
     'admin.per_court_hint' => 'Each court can borrow at most half of the stock. Removing equipment used in past bookings hides it instead of deleting history.',
     'err.csrf' => 'Your session has expired. Please go back and try again.',
+
+    // ---------- Home hero ----------
+    'home.free_today' => '{n} slots free today',
+    'home.free_today_sub' => 'Live across all courts',
+    'home.from_price' => 'Courts from',
 ];

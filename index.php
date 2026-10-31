@@ -7,6 +7,19 @@ require_once 'includes/court_svg.php';
 $sports = $pdo->query("SELECT s.*, (SELECT COUNT(*) FROM courts c WHERE c.sport_id = s.sport_id) AS n_courts
                        FROM sports s WHERE s.status = 'active' ORDER BY s.sport_id")->fetchAll();
 $totalCourts = array_sum(array_column($sports, 'n_courts'));
+$minPrice = $sports ? min(array_map(fn($s) => (int) $s['price'], $sports)) : 0;
+
+// จำนวนรอบที่ยังว่างวันนี้ (ทุกสนาม ทุกกีฬา นับเฉพาะรอบที่ยังไม่เริ่ม) แสดงบนหน้าแรกแบบสด ๆ
+$now = date('H:i:s');
+$today = date('Y-m-d');
+$slotsLeft = $pdo->prepare("SELECT COUNT(*) FROM courts c JOIN time_slots ts ON ts.sport_id = c.sport_id
+                            WHERE c.status = 'available' AND ts.status = 'active' AND ts.start_time > ?");
+$slotsLeft->execute([$now]);
+$takenLeft = $pdo->prepare("SELECT COUNT(*) FROM bookings b JOIN booking_slots bs ON bs.booking_id = b.booking_id
+                            JOIN time_slots ts ON ts.slot_id = bs.slot_id
+                            WHERE b.booking_date = ? AND ts.start_time > ? AND " . activeBookingSql('b'));
+$takenLeft->execute([$today, $now]);
+$freeToday = max(0, (int) $slotsLeft->fetchColumn() - (int) $takenLeft->fetchColumn());
 
 $pageTitle = '';
 $pageStyles = ['home'];
@@ -14,20 +27,39 @@ include 'includes/head.php';
 ?>
 <main class="home">
     <!-- HERO -->
-    <section class="hero" style="background-image: linear-gradient(100deg, rgba(15,23,42,.92) 0%, rgba(15,23,42,.7) 45%, rgba(15,23,42,.25) 100%), url('<?= SITE_URL ?>/images/hero.png');">
-        <div class="wrap hero-inner">
-            <span class="badge badge-dark hero-badge"><?= icon('map-pin', 12) ?> <?= e('home.location') ?></span>
-            <h1 class="hero-title">HIT THE <span>COURT</span></h1>
-            <p class="hero-sub"><?= e('home.tagline') ?></p>
-            <div class="row">
-                <a href="<?= SITE_URL ?>/courts" class="btn btn-primary btn-lg"><?= icon('calendar', 18) ?> <?= e('home.cta_book') ?></a>
-                <a href="<?= SITE_URL ?>/membership" class="btn btn-lg hero-ghost"><?= icon('crown', 18) ?> <?= e('home.cta_member') ?></a>
+    <section class="hero">
+        <div class="wrap hero-grid">
+            <div class="hero-copy">
+                <span class="hero-badge"><?= icon('map-pin', 14) ?> <?= e('home.location') ?></span>
+                <h1 class="hero-title">HIT THE <span>COURT</span></h1>
+                <p class="hero-sub"><?= e('home.tagline') ?></p>
+                <div class="hero-actions">
+                    <a href="<?= SITE_URL ?>/courts" class="btn btn-primary btn-lg"><?= icon('calendar', 18) ?> <?= e('home.cta_book') ?></a>
+                    <a href="<?= SITE_URL ?>/membership" class="btn btn-lg hero-ghost"><?= icon('crown', 18) ?> <?= e('home.cta_member') ?></a>
+                </div>
+                <ul class="hero-stats">
+                    <li><strong><?= count($sports) ?></strong><span><?= e('home.stat_sports') ?></span></li>
+                    <li><strong><?= $totalCourts ?></strong><span><?= e('home.stat_courts') ?></span></li>
+                    <li><strong>7</strong><span><?= e('home.stat_days') ?></span></li>
+                </ul>
             </div>
-            <ul class="hero-stats">
-                <li><strong><?= count($sports) ?></strong><span><?= e('home.stat_sports') ?></span></li>
-                <li><strong><?= $totalCourts ?></strong><span><?= e('home.stat_courts') ?></span></li>
-                <li><strong>7</strong><span><?= e('home.stat_days') ?></span></li>
-            </ul>
+
+            <div class="hero-visual" aria-hidden="true">
+                <div class="hero-photo">
+                    <picture>
+                        <source media="(max-width: 640px)" srcset="<?= SITE_URL ?>/images/hero-sports-sm.jpg">
+                        <img src="<?= SITE_URL ?>/images/hero-sports.jpg" alt="" width="1260" height="950" fetchpriority="high">
+                    </picture>
+                </div>
+                <div class="hero-float hero-float-live">
+                    <span class="live-dot"></span>
+                    <div><strong><?= e('home.free_today', ['n' => $freeToday]) ?></strong><small><?= e('home.free_today_sub') ?></small></div>
+                </div>
+                <div class="hero-float hero-float-price">
+                    <span class="float-ico"><?= icon('tag', 18) ?></span>
+                    <div><small><?= e('home.from_price') ?></small><strong><?= formatPrice($minPrice) ?> / <?= e('courts.round') ?></strong></div>
+                </div>
+            </div>
         </div>
     </section>
 
