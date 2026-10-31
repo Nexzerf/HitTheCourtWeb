@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!preg_match('/^[0-9+\-\s]{9,20}$/', $old['phone'])) $errors['phone'] = t('err.phone_invalid');
 
     if (!$errors) {
-        $check = $pdo->prepare("SELECT username, email FROM users WHERE username = ? OR email = ?");
+        $check = $pdo->prepare("SELECT username, email FROM users WHERE LOWER(username) = LOWER(?) OR LOWER(email) = LOWER(?)");
         $check->execute([$old['username'], $old['email']]);
         foreach ($check->fetchAll() as $row) {
             if (strcasecmp($row['username'], $old['username']) === 0) $errors['username'] = t('auth.err_username_taken');

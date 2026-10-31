@@ -80,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$booking['is_expired']) {
             if (isset($taken[$booking['court_id'] . '_' . $s['slot_id']])) throw new Exception(t('err.slot_taken', ['time' => formatTime($s['start_time'])]));
         }
 
-        $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, slip_image, payment_status, verified_at) VALUES (?, ?, ?, ?, 'verified', NOW())")
-            ->execute([$bookingId, $method, $paidAmount, $upload['path'] ?? null]);
+        $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, slip_image, payment_status, verified_at) VALUES (?, ?, ?, ?, 'verified', ?)")
+            ->execute([$bookingId, $method, $paidAmount, $upload['path'] ?? null, date('Y-m-d H:i:s')]);
         $pdo->prepare("UPDATE bookings SET payment_status = 'paid', payment_method = ?, expires_at = NULL WHERE booking_id = ?")
             ->execute([$method, $bookingId]);
         // สะสมแต้ม +1 ต่อการจองที่จ่ายแล้ว และหักแต้มที่แลกไป

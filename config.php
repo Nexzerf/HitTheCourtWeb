@@ -45,14 +45,18 @@ error_reporting(E_ALL);
 // ============================================
 // DATABASE CONFIGURATION
 // ============================================
-// ตั้งค่า "ชื่อที่อยู่" และ "รหัสผ่าน" สำหรับเข้าถึงฐานข้อมูล MySQL
+// ตั้งค่า "ชื่อที่อยู่" และ "รหัสผ่าน" สำหรับเข้าถึงฐานข้อมูล
+// DB_DRIVER: mysql (โฮสต์ทั่วไป เช่น InfinityFree) หรือ pgsql (Supabase / PostgreSQL)
+define('DB_DRIVER', env('DB_DRIVER', 'mysql') === 'pgsql' ? 'pgsql' : 'mysql');
 define('DB_HOST', env('DB_HOST', 'localhost'));
-define('DB_PORT', env('DB_PORT', '3306'));
+define('DB_PORT', env('DB_PORT', DB_DRIVER === 'pgsql' ? '5432' : '3306'));
 define('DB_NAME', env('DB_NAME', 'hit_the_court'));
 define('DB_USER', env('DB_USER', 'root'));
 define('DB_PASS', env('DB_PASS', ''));
-// ฐานข้อมูลบนคลาวด์ (TiDB, Aiven ฯลฯ) ส่วนใหญ่บังคับใช้ SSL ให้ตั้ง DB_SSL=1
+// ฐานข้อมูลบนคลาวด์ (Supabase, TiDB ฯลฯ) ส่วนใหญ่บังคับใช้ SSL ให้ตั้ง DB_SSL=1
 define('DB_SSL', filter_var(env('DB_SSL', '0'), FILTER_VALIDATE_BOOLEAN));
+// PostgreSQL: schema ที่เก็บตารางของเว็บนี้ (ใน Supabase ใช้ hitthecourt แยกจากตารางอื่นในโปรเจกต์)
+define('DB_SCHEMA', env('DB_SCHEMA', DB_DRIVER === 'pgsql' ? 'hitthecourt' : ''));
 
 // ============================================
 // SITE CONFIGURATION
@@ -95,9 +99,12 @@ try {
     $pdoOptions = [
         PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION, // ให้มันร้องบอกทันทีถ้ามี Error
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,       // ดึงข้อมูลมาเป็น Array ง่ายๆ
-        PDO::ATTR_EMULATE_PREPARES   => false,                  // ปิดการจำลองเพื่อความปลอดภัยสูงสุด
+        // MySQL: ใช้ prepared statement จริงของเซิร์ฟเวอร์
+        // PostgreSQL: ให้ PDO จำลองเอง เพราะ connection pooler ของ Supabase ใช้ prepared statement ฝั่งเซิร์ฟเวอร์ไม่ได้
+        // (ค่าที่ส่งเข้าไปยัง escape อย่างปลอดภัยเหมือนเดิม)
+        PDO::ATTR_EMULATE_PREPARES   => DB_DRIVER === 'pgsql',
     ];
-    if (DB_SSL) {
+    if (DB_SSL && DB_DRIVER === 'mysql') {
         $caFile = env('DB_SSL_CA');
         if (!$caFile) {
             foreach (['/etc/pki/tls/certs/ca-bundle.crt', '/etc/ssl/certs/ca-certificates.crt', '/etc/ssl/cert.pem'] as $candidate) {
@@ -108,17 +115,23 @@ try {
         $pdoOptions[PDO::MYSQL_ATTR_SSL_VERIFY_SERVER_CERT] = true;
     }
 
-    $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        $pdoOptions
-    );
+    $dsn = DB_DRIVER === 'pgsql'
+        ? "pgsql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . (DB_SSL ? ";sslmode=require" : "")
+        : "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4";
+    $pdo = new PDO($dsn, DB_USER, DB_PASS, $pdoOptions);
 
-    // ให้ NOW() ในฐานข้อมูลเป็นเวลาไทยตรงกับ PHP (ฐานข้อมูลบนคลาวด์มักตั้งเป็น UTC)
-    $dbTimezone = env('DB_TIMEZONE', ON_VERCEL ? '+07:00' : '');
-    if ($dbTimezone !== '') {
-        $pdo->prepare("SET time_zone = ?")->execute([$dbTimezone]);
+    if (DB_DRIVER === 'pgsql') {
+        // ใช้ตารางใน schema ของเว็บนี้ และให้ now() เป็นเวลาไทยตรงกับ PHP
+        if (DB_SCHEMA !== '' && preg_match('/^[a-z_][a-z0-9_]*$/', DB_SCHEMA)) {
+            $pdo->exec("SET search_path TO " . DB_SCHEMA . ", public");
+        }
+        $pdo->exec("SET TIME ZONE 'Asia/Bangkok'");
+    } else {
+        // ให้ NOW() ในฐานข้อมูลเป็นเวลาไทยตรงกับ PHP (ฐานข้อมูลบนคลาวด์มักตั้งเป็น UTC)
+        $dbTimezone = env('DB_TIMEZONE', ON_VERCEL ? '+07:00' : '');
+        if ($dbTimezone !== '') {
+            $pdo->prepare("SET time_zone = ?")->execute([$dbTimezone]);
+        }
     }
 } catch (PDOException $e) {
     // ถ้าจับมือไม่สำเร็จ (เชื่อมไม่ติด) ให้บันทึก Log เก็บไว้ลับๆ แล้วแสดงข้อความแจ้งเตือนแบบกว้างๆ
@@ -155,9 +168,11 @@ class DatabaseSessionHandler implements SessionHandlerInterface
         // ผู้เข้าชมที่ยังไม่ได้ล็อกอินไม่มีข้อมูลใน Session ไม่ต้องเก็บแถวว่าง ๆ ให้รกฐานข้อมูล
         if ($data === '') return $this->destroy($id);
 
-        $stmt = $this->pdo->prepare(
-            "INSERT INTO sessions (id, data, last_activity) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE data = VALUES(data), last_activity = VALUES(last_activity)"
+        $stmt = $this->pdo->prepare(DB_DRIVER === 'pgsql'
+            ? "INSERT INTO sessions (id, data, last_activity) VALUES (?, ?, ?)
+               ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, last_activity = EXCLUDED.last_activity"
+            : "INSERT INTO sessions (id, data, last_activity) VALUES (?, ?, ?)
+               ON DUPLICATE KEY UPDATE data = VALUES(data), last_activity = VALUES(last_activity)"
         );
         return $stmt->execute([$id, $data, time()]);
     }
@@ -220,7 +235,8 @@ function saveUploadedFile(array $file, string $folder, string $filename): ?array
         if (!move_uploaded_file($file['tmp_name'], $localFile)) return null;
 
         $stmt = $pdo->prepare("INSERT INTO uploaded_files (folder, filename, mime_type, data) VALUES (?, ?, ?, ?)");
-        $stmt->execute([$folder, $filename, mime_content_type($localFile) ?: 'application/octet-stream', file_get_contents($localFile)]);
+        // เก็บเป็น base64 (ข้อความ) ใช้ได้เหมือนกันทั้ง MySQL และ PostgreSQL
+        $stmt->execute([$folder, $filename, mime_content_type($localFile) ?: 'application/octet-stream', base64_encode(file_get_contents($localFile))]);
         return ['path' => 'media/' . $pdo->lastInsertId(), 'local' => $localFile];
     }
 
@@ -295,6 +311,11 @@ function requireAdmin() {
     if (!isAdmin()) {
         redirect('/admin/login.php');
     }
+}
+
+/** ตัวดำเนินการค้นหาแบบไม่สนตัวพิมพ์เล็กใหญ่ (MySQL ทำอยู่แล้ว, PostgreSQL ต้องใช้ ILIKE) */
+function dbLike(): string {
+    return DB_DRIVER === 'pgsql' ? 'ILIKE' : 'LIKE';
 }
 
 /**

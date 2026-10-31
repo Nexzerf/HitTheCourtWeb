@@ -20,16 +20,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $prev = $before->fetch();
         if ($prev && $pay && $status) {
             $pdo->beginTransaction();
-            $pdo->prepare("UPDATE bookings SET payment_status = ?, booking_status = ?, notes = ?, expires_at = IF(? = 'paid', NULL, expires_at) WHERE booking_id = ?")
-                ->execute([$pay, $status, $notes ?: null, $pay, $id]);
+            $pdo->prepare("UPDATE bookings SET payment_status = ?, booking_status = ?, notes = ? WHERE booking_id = ?")
+                ->execute([$pay, $status, $notes ?: null, $id]);
+            if ($pay === 'paid') $pdo->prepare("UPDATE bookings SET expires_at = NULL WHERE booking_id = ?")->execute([$id]);
             // แอดมินยืนยันการจ่ายเงินเอง: บันทึกการชำระเงินและให้แต้มเหมือนจ่ายผ่านเว็บ
             if ($prev['payment_status'] !== 'paid' && $pay === 'paid') {
-                $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, payment_status, verified_by, verified_at)
-                               SELECT booking_id, COALESCE(payment_method, 'promptpay'), total_price, 'verified', ?, NOW() FROM bookings WHERE booking_id = ?")
-                    ->execute([$_SESSION['admin_id'], $id]);
-                $pdo->prepare("UPDATE users u JOIN bookings b ON b.user_id = u.user_id
-                               SET u.points = GREATEST(0, u.points + 1 - b.points_redeemed), u.total_bookings = u.total_bookings + 1 WHERE b.booking_id = ?")
-                    ->execute([$id]);
+                $bk = $pdo->prepare("SELECT payment_method, total_price, points_redeemed, user_id FROM bookings WHERE booking_id = ?");
+                $bk->execute([$id]);
+                $bk = $bk->fetch();
+                $pdo->prepare("INSERT INTO payments (booking_id, payment_method, amount, payment_status, verified_by, verified_at) VALUES (?, ?, ?, 'verified', ?, ?)")
+                    ->execute([$id, $bk['payment_method'] ?: 'promptpay', $bk['total_price'], (int) $_SESSION['admin_id'], date('Y-m-d H:i:s')]);
+                $pdo->prepare("UPDATE users SET points = GREATEST(0, points + 1 - ?), total_bookings = total_bookings + 1 WHERE user_id = ?")
+                    ->execute([(int) $bk['points_redeemed'], $bk['user_id']]);
             }
             $pdo->commit();
             $_SESSION['flash_success'] = t('admin.booking_updated');
@@ -56,7 +58,8 @@ $perPage = 25;
 $where = ['1=1'];
 $params = [];
 if ($q !== '') {
-    $where[] = "(b.booking_code LIKE ? OR b.first_name LIKE ? OR b.last_name LIKE ? OR b.phone LIKE ? OR u.username LIKE ?)";
+    $like = dbLike();
+    $where[] = "(b.booking_code $like ? OR b.first_name $like ? OR b.last_name $like ? OR b.phone $like ? OR u.username $like ?)";
     array_push($params, ...array_fill(0, 5, '%' . $q . '%'));
 }
 if ($sportFilter) { $where[] = 'c.sport_id = ?'; $params[] = $sportFilter; }

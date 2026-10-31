@@ -20,7 +20,7 @@ if ($action === 'details') {
     $phone = trim($_POST['phone'] ?? '');
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = t('err.email_invalid');
     if (!preg_match('/^[0-9+\-\s]{9,20}$/', $phone)) $errors[] = t('err.phone_invalid');
-    $dup = $pdo->prepare("SELECT 1 FROM users WHERE email = ? AND user_id <> ?");
+    $dup = $pdo->prepare("SELECT 1 FROM users WHERE LOWER(email) = LOWER(?) AND user_id <> ?");
     $dup->execute([$email, $user['user_id']]);
     if ($dup->fetchColumn()) $errors[] = t('auth.err_email_taken');
     if (!$errors) {

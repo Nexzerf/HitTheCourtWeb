@@ -9,7 +9,7 @@ $error = '';
 $username = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $username = trim($_POST['username'] ?? '');
-    $stmt = $pdo->prepare("SELECT * FROM admins WHERE username = ? AND status = 'active'");
+    $stmt = $pdo->prepare("SELECT * FROM admins WHERE LOWER(username) = LOWER(?) AND status = 'active'");
     $stmt->execute([$username]);
     $admin = $stmt->fetch();
     if ($admin && password_verify($_POST['password'] ?? '', $admin['password'])) {
@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $_SESSION['admin_id'] = $admin['admin_id'];
         $_SESSION['admin_username'] = $admin['username'];
         $_SESSION['admin_role'] = $admin['role'];
-        $pdo->prepare("UPDATE admins SET last_login = NOW() WHERE admin_id = ?")->execute([$admin['admin_id']]);
+        $pdo->prepare("UPDATE admins SET last_login = ? WHERE admin_id = ?")->execute([date('Y-m-d H:i:s'), $admin['admin_id']]);
         redirect('/admin/dashboard.php');
     }
     $error = t('auth.err_invalid');

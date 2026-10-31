@@ -9,8 +9,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = intval($_POST['report_id'] ?? 0);
     if (($_POST['action'] ?? '') === 'update') {
         $status = in_array($_POST['status'] ?? '', ['new', 'in_progress', 'resolved'], true) ? $_POST['status'] : 'new';
-        $pdo->prepare("UPDATE reports SET status = ?, admin_notes = ?, resolved_by = IF(? = 'resolved', ?, NULL), resolved_at = IF(? = 'resolved', NOW(), NULL) WHERE report_id = ?")
-            ->execute([$status, trim($_POST['admin_notes'] ?? '') ?: null, $status, $_SESSION['admin_id'], $status, $id]);
+        $resolved = $status === 'resolved';
+        $pdo->prepare("UPDATE reports SET status = ?, admin_notes = ?, resolved_by = ?, resolved_at = ? WHERE report_id = ?")
+            ->execute([$status, trim($_POST['admin_notes'] ?? '') ?: null, $resolved ? (int) $_SESSION['admin_id'] : null,
+                $resolved ? date('Y-m-d H:i:s') : null, $id]);
         $_SESSION['flash_success'] = t('admin.report_updated');
     } elseif (($_POST['action'] ?? '') === 'delete') {
         $pdo->prepare("DELETE FROM reports WHERE report_id = ?")->execute([$id]);
@@ -25,7 +27,7 @@ $where = ['1=1']; $params = [];
 if ($statusFilter) { $where[] = 'r.status = ?'; $params[] = $statusFilter; }
 if ($catFilter) { $where[] = 'r.category = ?'; $params[] = $catFilter; }
 $stmt = $pdo->prepare("SELECT r.*, u.username, u.email, u.phone FROM reports r JOIN users u ON u.user_id = r.user_id
-                       WHERE " . implode(' AND ', $where) . " ORDER BY FIELD(r.status, 'new', 'in_progress', 'resolved'), r.created_at DESC");
+                       WHERE " . implode(' AND ', $where) . " ORDER BY CASE r.status WHEN 'new' THEN 1 WHEN 'in_progress' THEN 2 ELSE 3 END, r.created_at DESC");
 $stmt->execute($params);
 $reports = $stmt->fetchAll();
 $counts = $pdo->query("SELECT status, COUNT(*) FROM reports GROUP BY status")->fetchAll(PDO::FETCH_KEY_PAIR);

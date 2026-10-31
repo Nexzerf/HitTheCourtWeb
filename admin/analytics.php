@@ -22,12 +22,12 @@ $daily->execute([date('Y-m-d', strtotime('-13 days')), date('Y-m-d')]);
 $daily = $daily->fetchAll(PDO::FETCH_KEY_PAIR);
 $maxDaily = max(1, ...array_values($daily ?: [0]));
 
-$popular = $pdo->prepare("SELECT TIME_FORMAT(ts.start_time, '%H:%i') AS t, COUNT(*) AS n FROM booking_slots bs
+$popular = $pdo->prepare("SELECT ts.start_time, COUNT(*) AS n FROM booking_slots bs
     JOIN bookings b ON b.booking_id = bs.booking_id JOIN time_slots ts ON ts.slot_id = bs.slot_id
     WHERE b.payment_status = 'paid' AND b.booking_status <> 'cancelled' AND b.booking_date >= ?
-    GROUP BY TIME_FORMAT(ts.start_time, '%H:%i') ORDER BY n DESC LIMIT 6");
+    GROUP BY ts.start_time ORDER BY n DESC LIMIT 6");
 $popular->execute([$from]);
-$popular = $popular->fetchAll();
+$popular = array_map(fn($r) => ['t' => formatTime($r['start_time']), 'n' => (int) $r['n']], $popular->fetchAll());
 $maxPopular = max(1, ...array_map(fn($r) => (int) $r['n'], $popular ?: [['n' => 0]]));
 
 $totals = ['revenue' => array_sum(array_column($bySport, 'revenue')), 'bookings' => array_sum(array_column($bySport, 'n'))];

@@ -19,7 +19,7 @@ $q = trim($_GET['q'] ?? '');
 $type = $_GET['type'] ?? '';
 $today = date('Y-m-d');
 $where = ['1=1']; $params = [];
-if ($q !== '') { $where[] = '(username LIKE ? OR email LIKE ? OR phone LIKE ? OR first_name LIKE ? OR last_name LIKE ?)'; array_push($params, ...array_fill(0, 5, "%$q%")); }
+if ($q !== '') { $l = dbLike(); $where[] = "(username $l ? OR email $l ? OR phone $l ? OR first_name $l ? OR last_name $l ?)"; array_push($params, ...array_fill(0, 5, "%$q%")); }
 if ($type === 'member') $where[] = "is_member = 1 AND member_expire >= '$today'";
 if ($type === 'regular') $where[] = "(is_member = 0 OR member_expire IS NULL OR member_expire < '$today')";
 $stmt = $pdo->prepare("SELECT * FROM users WHERE " . implode(' AND ', $where) . " ORDER BY created_at DESC");

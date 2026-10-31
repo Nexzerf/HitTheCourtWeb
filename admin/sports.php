@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $num = fn($k, $min = 0) => max($min, intval($_POST[$k] ?? 0));
 
     if ($action === 'court_toggle') {
-        $pdo->prepare("UPDATE courts SET status = IF(status = 'available', 'maintenance', 'available') WHERE court_id = ?")->execute([$num('court_id')]);
+        $pdo->prepare("UPDATE courts SET status = CASE WHEN status = 'available' THEN 'maintenance' ELSE 'available' END WHERE court_id = ?")->execute([$num('court_id')]);
         $_SESSION['flash_success'] = t('admin.court_updated');
     } elseif ($action === 'sport_update') {
         $pdo->prepare("UPDATE sports SET price = ?, price_per_round = ?, status = ? WHERE sport_id = ?")

@@ -13,6 +13,7 @@ if (!isLoggedIn() && !isAdmin()) {
 $stmt = $pdo->prepare("SELECT filename, mime_type, data FROM uploaded_files WHERE id = ?");
 $stmt->execute([intval($_GET['id'] ?? 0)]);
 $file = $stmt->fetch();
+if ($file) $file['data'] = base64_decode($file['data']);
 
 if (!$file) {
     http_response_code(404);
