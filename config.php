@@ -4,6 +4,8 @@
 // TIMEZONE - ต้องอยู่บนสุดก่อนทุกอย่าง
 // ============================================
 date_default_timezone_set('Asia/Bangkok');
+// เก็บ output ไว้ก่อน กันข้อความหลุดออกไปก่อน header() ทำให้ redirect ไม่ทำงาน (หน้าขาว)
+if (PHP_SAPI !== 'cli' && ob_get_level() === 0) ob_start();
 /**
  * HIT THE COURT - Main Configuration File
  * 

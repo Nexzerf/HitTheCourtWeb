@@ -1,6 +1,7 @@
 // assets/js/app.js
 // สคริปต์กลางของหน้าที่ใช้ดีไซน์ใหม่: แท็บ, ช่องอัปโหลดไฟล์, ยืนยันก่อนกด, แจ้งเตือน
 (function () {
+    var BASE = ((document.currentScript && document.currentScript.src) || '').replace(/\/assets\/js\/app\.js.*$/, '');
     // ---------- แท็บ: <div data-tabs> <button class="tab" data-tab="x"> ... <div class="tab-panel" data-panel="x"> ----------
     document.querySelectorAll('[data-tabs]').forEach(function (group) {
         var tabs = group.querySelectorAll('[data-tab]');
@@ -28,6 +29,75 @@
         img.src = url;
     }
 
+    // ---------- ตรวจว่ารูปสลิปมี QR code (ใช้ jsQR ในเบราว์เซอร์) ----------
+    function loadJsQR(done) {
+        if (window.jsQR) return done();
+        var s = document.createElement('script');
+        s.src = BASE + '/assets/js/jsqr.js';
+        s.onload = done; s.onerror = done;
+        document.head.appendChild(s);
+    }
+    function scanQR(file, done) {
+        loadJsQR(function () {
+            if (!window.jsQR) return done(null);
+            var img = new Image(), url = URL.createObjectURL(file);
+            img.onload = function () {
+                var found = null, sizes = [1000, 1600, 700, 2200];
+                for (var i = 0; i < sizes.length && !found; i++) {
+                    var scale = Math.min(1, sizes[i] / Math.max(img.naturalWidth, img.naturalHeight));
+                    var c = document.createElement('canvas');
+                    c.width = Math.max(1, Math.round(img.naturalWidth * scale)); c.height = Math.max(1, Math.round(img.naturalHeight * scale));
+                    var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+                    ctx.drawImage(img, 0, 0, c.width, c.height);
+                    var data = ctx.getImageData(0, 0, c.width, c.height);
+                    var code = window.jsQR(data.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+                    if (code && code.data) found = code.data;
+                    if (scale === 1) break;
+                }
+                URL.revokeObjectURL(url);
+                done(found);
+            };
+            img.onerror = function () { URL.revokeObjectURL(url); done(null); };
+            img.src = url;
+        });
+    }
+    document.querySelectorAll('input[type=file][data-require-qr]').forEach(function (input) {
+        var form = input.form;
+        var hidden = form.querySelector('input[name=qr_text]');
+        var status = form.querySelector('[data-qr-status]');
+        var state = 'empty';
+        var show = function (kind, text) {
+            if (!status) return;
+            status.hidden = !text;
+            status.className = 'qr-status qr-' + kind;
+            status.textContent = text || '';
+            var zone = input.closest('.upload');
+            if (zone) zone.classList.toggle('is-invalid', kind === 'bad');
+        };
+        input.addEventListener('change', function () {
+            var file = input.files && input.files[0];
+            hidden.value = '';
+            if (!file) { state = 'empty'; show('', ''); return; }
+            if (input._compressing) return;
+            state = 'scanning';
+            show('wait', status.dataset.scanning);
+            scanQR(file, function (text) {
+                if (input.files[0] !== file) return;
+                state = text ? 'ok' : 'bad';
+                hidden.value = text ? text.slice(0, 500) : '';
+                show(text ? 'ok' : 'bad', text ? status.dataset.ok : status.dataset.bad);
+            });
+        });
+        form.addEventListener('submit', function (e) {
+            if (state === 'ok') return;
+            e.preventDefault();
+            if (state === 'scanning') show('wait', status.dataset.scanning);
+            else if (state === 'empty') show('bad', status.dataset.empty);
+            else show('bad', status.dataset.bad);
+            status.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
+    });
+
     // ---------- ช่องอัปโหลด: แสดงชื่อไฟล์และรูปตัวอย่าง ----------
     document.querySelectorAll('.upload').forEach(function (zone) {
         var input = zone.querySelector('input[type=file]');
@@ -40,7 +110,9 @@
             // รูปจากมือถือมักใหญ่เกิน 4 MB หรือเป็นชนิดแปลก ๆ -> ย่อเป็น JPEG ก่อนส่ง
             if (file && input.hasAttribute('data-compress') && !input._compressed && file.type.indexOf('image/') === 0
                 && (file.size > 1500000 || !/^image\/(jpeg|png)$/.test(file.type)) && window.DataTransfer) {
+                input._compressing = true;
                 shrinkImage(file, 1600, function (blob) {
+                    input._compressing = false;
                     if (!blob) return;
                     var dt = new DataTransfer();
                     dt.items.add(new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' }));
@@ -74,8 +146,9 @@
 
     // ---------- กันกดส่งฟอร์มซ้ำ ----------
     document.querySelectorAll('form[data-once]').forEach(function (form) {
-        form.addEventListener('submit', function () {
+        form.addEventListener('submit', function (e) {
             setTimeout(function () {
+                if (e.defaultPrevented) return;
                 form.querySelectorAll('button[type=submit]').forEach(function (b) { b.disabled = true; });
             }, 0);
         });

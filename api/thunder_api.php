@@ -112,5 +112,3 @@ class ThunderClient
         throw new Exception($errMsg);
     }
 }
-?>
-```

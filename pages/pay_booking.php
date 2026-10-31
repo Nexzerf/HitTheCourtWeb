@@ -46,6 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$booking['is_expired']) {
         $upload = null;
         if ($amount > 0) {
             $img = validateImageUpload($_FILES['slip'] ?? null);
+            if (trim($_POST['qr_text'] ?? '') === '') throw new Exception(t('pay.err_no_qr'));
             $upload = saveUploadedFile($_FILES['slip'], 'slips', 'bk_' . $bookingId . '_' . time() . '.' . $img['ext'], $img['mime']);
             if (!$upload) throw new Exception(t('pay.err_upload'));
         }
@@ -162,11 +163,15 @@ include '../includes/head.php';
                     <div class="card-head"><h2><?= icon('upload', 18) ?> <?= e('pay.upload_title') ?></h2></div>
                     <div class="card-body">
                         <label class="upload">
-                            <input type="file" name="slip" accept="image/*" data-compress <?= $amount > 0 ? 'required' : '' ?>>
+                            <input type="file" name="slip" accept="image/*" data-compress data-require-qr <?= $amount > 0 ? 'required' : '' ?>>
                             <?= icon('upload', 28) ?>
                             <strong data-upload-label data-empty="<?= e('pay.upload_cta') ?>"><?= e('pay.upload_cta') ?></strong>
                             <span class="small"><?= e('pay.upload_hint') ?></span>
                         </label>
+                        <input type="hidden" name="qr_text" value="">
+                        <p class="qr-status" data-qr-status hidden aria-live="polite"
+                           data-scanning="<?= e('pay.qr_scanning') ?>" data-ok="<?= e('pay.qr_ok') ?>"
+                           data-bad="<?= e('pay.err_no_qr') ?>" data-empty="<?= e('pay.err_slip_required') ?>"></p>
                     </div>
                 </section>
             </div>
