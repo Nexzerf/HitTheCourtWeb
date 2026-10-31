@@ -21,8 +21,15 @@ function isActiveMember(array $user): bool {
 
 /** เงื่อนไข SQL สำหรับการจองที่ยังถือสนามอยู่ (จ่ายแล้ว หรือกำลังรอจ่ายและยังไม่หมดเวลา) */
 function activeBookingSql(string $alias = 'b'): string {
+    // ใช้เวลาของ PHP (Asia/Bangkok) แทน NOW() ของฐานข้อมูล เผื่อฐานข้อมูลตั้งเขตเวลาไว้ต่างกัน
+    $now = date('Y-m-d H:i:s');
     return "($alias.booking_status = 'active' AND ($alias.payment_status = 'paid'
-             OR ($alias.payment_status = 'pending' AND $alias.expires_at IS NOT NULL AND $alias.expires_at > NOW())))";
+             OR ($alias.payment_status = 'pending' AND $alias.expires_at IS NOT NULL AND $alias.expires_at > '$now')))";
+}
+
+/** เวลาหมดอายุของการล็อกสนาม (นับจากตอนนี้) */
+function holdExpiresAt(): string {
+    return date('Y-m-d H:i:s', time() + BOOKING_HOLD_MINUTES * 60);
 }
 
 /** ช่วงเวลาที่ถูกจองแล้วของกีฬานั้นในวันนั้น: ['courtId_slotId' => true] */
@@ -256,4 +263,74 @@ function bookingTimeRange(PDO $pdo, int $bookingId): string {
     $stmt->execute([$bookingId]);
     $parts = array_map(fn($r) => formatTime($r['start_time']) . '–' . formatTime($r['end_time']), $stmt->fetchAll());
     return implode(', ', $parts);
+}
+
+/**
+ * ข้อมูลการจองแบบครบชุด (ใช้ในหน้าชำระเงิน, หน้าสำเร็จ, หน้าการจองของฉัน, แอดมิน)
+ * คืนค่า booking + sport + court + slots + equipment หรือ null ถ้าไม่พบ
+ */
+function loadBookingDetails(PDO $pdo, int $bookingId): ?array {
+    $stmt = $pdo->prepare("
+        SELECT b.*, c.court_number, c.sport_id, s.sport_name, s.name_th AS sport_name_th, s.slug AS sport_slug,
+               u.username, u.email AS user_email, u.phone AS user_phone,
+               p.slip_image, p.payment_status AS slip_status, p.created_at AS paid_at
+        FROM bookings b
+        JOIN courts c ON c.court_id = b.court_id
+        JOIN sports s ON s.sport_id = c.sport_id
+        JOIN users u ON u.user_id = b.user_id
+        LEFT JOIN payments p ON p.payment_id = (SELECT MAX(payment_id) FROM payments WHERE booking_id = b.booking_id)
+        WHERE b.booking_id = ?
+    ");
+    $stmt->execute([$bookingId]);
+    $booking = $stmt->fetch();
+    if (!$booking) return null;
+
+    $stmt = $pdo->prepare("SELECT ts.* FROM booking_slots bs JOIN time_slots ts ON ts.slot_id = bs.slot_id
+                           WHERE bs.booking_id = ? ORDER BY ts.start_time");
+    $stmt->execute([$bookingId]);
+    $booking['slots'] = $stmt->fetchAll();
+    if (!$booking['slots']) {
+        // การจองเก่าก่อนมีตาราง booking_slots
+        $stmt = $pdo->prepare("SELECT * FROM time_slots WHERE slot_id = ?");
+        $stmt->execute([$booking['slot_id']]);
+        $booking['slots'] = $stmt->fetchAll();
+    }
+
+    $stmt = $pdo->prepare("SELECT be.*, e.eq_name, e.name_th FROM booking_equipment be JOIN equipment e ON e.eq_id = be.eq_id WHERE be.booking_id = ?");
+    $stmt->execute([$bookingId]);
+    $booking['equipment'] = $stmt->fetchAll();
+
+    $booking['sport_label'] = LANG === 'th' && $booking['sport_name_th'] ? $booking['sport_name_th'] : $booking['sport_name'];
+    $booking['court_label'] = ($booking['sport_slug'] === 'table-tennis' ? t('booking.table') : t('booking.court')) . ' ' . $booking['court_number'];
+    $booking['time_label'] = implode(', ', array_map(fn($s) => formatTime($s['start_time']) . '–' . formatTime($s['end_time']), $booking['slots']));
+    $booking['customer_name'] = trim(($booking['first_name'] ?? '') . ' ' . ($booking['last_name'] ?? '')) ?: $booking['username'];
+    $booking['customer_phone'] = $booking['phone'] ?: $booking['user_phone'];
+    $booking['is_expired'] = $booking['payment_status'] === 'pending'
+        && ($booking['expires_at'] === null || strtotime($booking['expires_at']) <= time());
+    return $booking;
+}
+
+/** สถานะการจองสำหรับแสดงผล: [ข้อความ, คลาสสี] */
+function bookingStatusBadge(array $booking): array {
+    if ($booking['booking_status'] === 'cancelled') return [t('status.cancelled'), 'badge-danger'];
+    if ($booking['payment_status'] === 'paid') {
+        return $booking['booking_date'] < date('Y-m-d') ? [t('status.completed'), ''] : [t('status.confirmed'), 'badge-success'];
+    }
+    if ($booking['payment_status'] === 'refunded') return [t('status.refunded'), ''];
+    if (!empty($booking['is_expired'])) return [t('status.expired'), ''];
+    return [t('status.awaiting_payment'), 'badge-warning'];
+}
+
+/** รายการรายละเอียดราคาจากการจองที่บันทึกแล้ว (ใช้กับ kv) */
+function bookingPriceRows(array $booking): array {
+    $rows = [[t('price.court_fee_total'), formatPrice($booking['court_price'])]];
+    foreach ($booking['equipment'] as $eq) {
+        $name = LANG === 'th' && $eq['name_th'] ? $eq['name_th'] : $eq['eq_name'];
+        $label = $name . ' × ' . (int) $eq['quantity'] . ($eq['free_quantity'] ? ' (' . t('price.free_n', ['n' => $eq['free_quantity']]) . ')' : '');
+        $rows[] = [$label, formatPrice($eq['subtotal'])];
+    }
+    if ((float) $booking['discount_amount'] > 0) {
+        $rows[] = [t('price.discount') . ($booking['discount_note'] ? ' · ' . $booking['discount_note'] : ''), '−' . formatPrice($booking['discount_amount']), 'discount'];
+    }
+    return $rows;
 }

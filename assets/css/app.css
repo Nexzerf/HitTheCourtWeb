@@ -62,7 +62,7 @@ body.app.lang-th { line-height: 1.7; }
 .app h2 { font-size: clamp(1.35rem, 1.1rem + 1vw, 1.75rem); }
 .app h3 { font-size: 1.15rem; }
 .app p { margin: 0 0 1em; }
-.app a { color: var(--c-primary); }
+:where(.app) a { color: var(--c-primary); }
 .app img, .app svg { max-width: 100%; }
 .app .icon { flex-shrink: 0; vertical-align: middle; }
 
@@ -258,8 +258,8 @@ body.app.lang-th { line-height: 1.7; }
     font-size: .93rem;
 }
 .kv-row:last-child { border-bottom: 0; }
-.kv-row dt { color: var(--c-muted); flex-shrink: 0; }
-.kv-row dd { margin: 0; color: var(--c-ink); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.kv-row dt { color: var(--c-muted); flex: 1 1 auto; min-width: 0; }
+.kv-row dd { flex: 0 1 auto; max-width: 62%; margin: 0; color: var(--c-ink); font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .kv-row.discount dd { color: var(--c-success); }
 .kv-total {
     display: flex; justify-content: space-between; align-items: center; gap: 12px;

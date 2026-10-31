@@ -58,7 +58,7 @@ try {
         INSERT INTO bookings (booking_code, user_id, first_name, last_name, phone, email, court_id, slot_id, booking_date,
             duration_minutes, court_price, equipment_total, discount_amount, discount_note, points_redeemed, total_price,
             payment_method, payment_status, booking_status, expires_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'active', DATE_ADD(NOW(), INTERVAL " . BOOKING_HOLD_MINUTES . " MINUTE))
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'active', ?)
     ");
     $stmt->execute([
         $bookingCode, $user['user_id'], $firstName, $lastName, $phone, $email,
@@ -67,7 +67,7 @@ try {
         $quote['court_fee'], $quote['equipment_total'], $quote['discount_amount'] + $quote['points_discount'],
         $notes ? implode(', ', $notes) : null,
         $quote['use_points'] ? POINTS_FOR_FREE_ROUND : 0,
-        $quote['total'], $method,
+        $quote['total'], $method, holdExpiresAt(),
     ]);
     $bookingId = (int) $pdo->lastInsertId();
 

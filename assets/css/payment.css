@@ -1,0 +1,53 @@
+/* =====================================================
+   หน้าชำระเงิน / ยืนยันการชำระเงิน
+   ===================================================== */
+.qr-card {
+    display: flex; flex-direction: column; align-items: center; gap: 8px;
+    max-width: 320px; margin: 0 auto;
+    padding: 20px;
+    border: 1px solid var(--c-border); border-radius: 18px;
+    background: #fff; text-align: center;
+    box-shadow: var(--shadow);
+}
+.qr-brand {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 999px;
+    background: #0B3D6E; color: #fff; font-size: .8rem; font-weight: 700; letter-spacing: .04em;
+}
+.qr-card img { width: min(240px, 70vw); height: auto; image-rendering: pixelated; }
+.qr-amount { color: var(--c-ink); font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; }
+.bank-box { padding: 4px 16px; border: 1px solid var(--c-border); border-radius: 14px; background: #F8FAFC; }
+.bank-box dd { display: inline-flex; align-items: center; gap: 4px; }
+
+/* ---------- Success ---------- */
+.success-hero { text-align: center; margin-bottom: 24px; }
+.success-icon {
+    display: grid; place-items: center;
+    width: 84px; height: 84px; margin: 0 auto 12px;
+    border-radius: 50%;
+    background: var(--c-success); color: #fff;
+    box-shadow: 0 0 0 10px var(--c-success-soft);
+    animation: pop .35s ease;
+}
+@keyframes pop { from { transform: scale(.6); opacity: 0; } }
+.success-word { margin: 0 0 4px; color: var(--c-success); font-weight: 800; letter-spacing: .2em; text-transform: uppercase; }
+.receipt { overflow: hidden; }
+.receipt-top {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 18px clamp(18px, 3vw, 28px);
+    background: linear-gradient(135deg, var(--c-primary), #1E40AF); color: #fff;
+}
+.receipt-top .muted { color: rgba(255, 255, 255, .75); }
+.receipt-code { font-family: var(--font-display); font-size: 1.35rem; font-weight: 700; letter-spacing: .02em; overflow-wrap: anywhere; }
+.receipt-section {
+    display: flex; align-items: center; gap: 8px;
+    margin: 20px 0 4px !important; font-size: .95rem !important;
+    color: var(--c-primary) !important;
+}
+.receipt-section:first-child { margin-top: 0 !important; }
+
+@media print {
+    .site-nav, .sn-backdrop, .site-footer, .row, .back-link { display: none !important; }
+    .page { padding-top: 0; }
+    .card { box-shadow: none; }
+}

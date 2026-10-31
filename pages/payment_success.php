@@ -1,191 +1,79 @@
 <?php
-// เริ่มแรกสุดเลย คือดึงเอาไฟล์ตั้งค่าต่างๆ (เช่น การเชื่อมฐานข้อมูล) มาใช้งาน
+// pages/payment_success.php
+// หน้ายืนยันการชำระเงินสำเร็จ: ข้อมูลลูกค้า, รายละเอียดการจองครบถ้วน และลิงก์กลับหน้าแรก
 require_once '../config.php';
-// เช็คเลยว่า "เข้าสู่ระบบแล้วหรือยัง?" ถ้ายังไม่ล็อกอินก็ไม่ให้เข้ามาหน้านี้
 requireLogin();
 
- // ดึงเลข Booking Code ที่ส่งมาทาง URL (เช่น ?booking=BK123) และทำความสะอาดข้อมูล
- $bookingCode = sanitize($_GET['booking'] ?? '');
+$code = $_GET['booking'] ?? '';
+$stmt = $pdo->prepare("SELECT booking_id FROM bookings WHERE booking_code = ? AND user_id = ?");
+$stmt->execute([$code, $_SESSION['user_id']]);
+$bookingId = (int) $stmt->fetchColumn();
+$booking = $bookingId ? loadBookingDetails($pdo, $bookingId) : null;
+if (!$booking) redirect('/reservations');
+if ($booking['payment_status'] !== 'paid') redirect('/pay_booking?id=' . $bookingId);
 
-// Fetch booking
-// ไปค้นหาข้อมูลการจองจากฐานข้อมูล โดยดึงมาหลายตารางเลย ทั้ง bookings, sports, courts, time_slots
-// เพื่อมาแสดงผลในใบเสร็จ และก็เช็คด้วยว่าเป็นของ User คนนี้จริงไหม (Security)
- $stmt = $pdo->prepare("
-    SELECT b.*, s.sport_name, c.court_number, ts.start_time, ts.end_time
-    FROM bookings b
-    JOIN sports s ON b.court_id IN (SELECT court_id FROM courts WHERE sport_id = s.sport_id)
-    JOIN courts c ON b.court_id = c.court_id
-    JOIN time_slots ts ON b.slot_id = ts.slot_id
-    WHERE b.booking_code = ? AND b.user_id = ?
-");
- $stmt->execute([$bookingCode, $_SESSION['user_id']]);
- $booking = $stmt->fetch();
-
-// ถ้าไม่เจอข้อมูลการจอง (อาจจะพิมพ์โค้ดมั่ว หรือไม่ใช่ของเรา) ก็ส่งกลับไปหน้ารายการจอง
-if (!$booking) {
-    redirect('/reservations');
-}
-
-// Get equipment
-// ดึงข้อมูลอุปกรณ์เสริมที่เช่าไว้มาแสดงด้วย (ถ้ามี)
- $eqStmt = $pdo->prepare("SELECT be.*, e.eq_name FROM booking_equipment be JOIN equipment e ON be.eq_id = e.eq_id WHERE be.booking_id = ?");
- $eqStmt->execute([$booking['booking_id']]);
- $equipment = $eqStmt->fetchAll();
-
-// Update user points if member
-// เช็คสถานะการจ่ายเงิน (ตอนนี้คือแค่เช็ค ยังไม่ได้ทำอะไรเพิ่มเติมในส่วนนี้)
-if ($booking['payment_status'] === 'paid') {
-    // Already processed
-} 
+$pageTitle = t('success.title');
+$pageStyles = ['payment'];
+include '../includes/head.php';
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- ตั้งชื่อหน้าเว็บว่า Booking Successful -->
-    <title>Booking Successful - Hit The Court</title>
-    <!-- โหลด Font สวยๆ และ CSS มาแต่งหน้าตาเว็บ -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../style.css">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/home.css">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-</head>
-<body>
- <!-- NAVBAR -->
-<?php include __DIR__ . '/../includes/navbar.php'; ?>
-    <main class="section">
-        <div class="container">
-            <!-- ส่วนแสดงผลความสำเร็จของการจอง -->
-            <div class="booking-success">
-                <!-- ไอคอนเช็คถูกสีเขียว -->
-                <div class="success-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                        <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                </div>
-                
-                <h1 class="success-title">Booking Submitted!</h1>
-                <p class="success-message">
-                    Your payment is being verified. We will confirm your booking shortly.<br>
-                    Please show this digital receipt at the front desk upon arrival.
-                </p>
-                
-                <!-- ส่วนของใบเสร็จดิจิทัล -->
-                <div class="receipt-card">
-                    <div class="receipt-header">
-                        <h3 style="color: white; margin: 0;">Digital Receipt</h3>
-                    </div>
-                    <div class="receipt-body">
-                        <!-- แสดงรายละเอียดการจอง -->
-                        <div class="receipt-row">
-                            <span class="receipt-label">Booking ID</span>
-                            <span class="receipt-value"><?= htmlspecialchars($booking['booking_code']) ?></span>
-                        </div>
-                        <div class="receipt-row">
-                            <span class="receipt-label">Sport</span>
-                            <span class="receipt-value"><?= htmlspecialchars($booking['sport_name']) ?></span>
-                        </div>
-                        <div class="receipt-row">
-                            <span class="receipt-label">Court</span>
-                            <span class="receipt-value">Court <?= $booking['court_number'] ?></span>
-                        </div>
-                        <div class="receipt-row">
-                            <span class="receipt-label">Date & Time</span>
-                            <span class="receipt-value">
-                                <!-- จัดรูปแบบวันที่และเวลาให้อ่านง่าย -->
-                                <?= date('d M Y', strtotime($booking['booking_date'])) ?> 
-                                (<?= date('g:i A', strtotime($booking['start_time'])) ?> - <?= date('g:i A', strtotime($booking['end_time'])) ?>)
-                            </span>
-                        </div>
-                        
-                        <!-- ถ้ามีอุปกรณ์ที่เช่า ก็แสดงรายการอุปกรณ์ -->
-                        <?php if (!empty($equipment)): ?>
-                        <div class="receipt-row">
-                            <span class="receipt-label">Equipment</span>
-                            <span class="receipt-value">
-                                <!-- วนลูปเอาชื่ออุปกรณ์ออกมาแสดง -->
-                                <?= implode(', ', array_map(function($e) { return $e['eq_name'] . ' (x' . $e['quantity'] . ')'; }, $equipment)) ?>
-                            </span>
-                        </div>
-                        <?php endif; ?>
-                        
-                        <!-- แสดงยอดรวมที่จ่ายไป -->
-                        <div class="order-total" style="margin-top: 1rem;">
-                            <span class="order-total-label">Total Paid</span>
-                            <span class="order-total-value"><?= number_format($booking['total_price']) ?> THB</span>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- ปุ่มกด 2 ปุ่ม: ปริ้นใบเสร็จ กับ กลับหน้าหลัก -->
-                <div class="d-flex gap-2 mt-4" style="justify-content: center;">
-                    <!-- ปุ่มนี้กดแล้วจะเรียกฟังก์ชันปริ้นของ Browser -->
-                    <button onclick="window.print()" class="btn btn-outline">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                            <rect x="6" y="14" width="12" height="8"></rect>
-                        </svg>
-                        Print Receipt
-                    </button>
-                    <a href="<?= SITE_URL ?>/" class="btn btn-primary">Back to Homepage</a>
-                </div>
-                
-                <!-- กล่องเตือนสีเหลือง: ให้มาก่อนเวลา 15 นาที -->
-                <div class="card mt-4" style="background: #FEF3C7; border: none;">
-                    <div class="card-body text-center">
-                        <p style="margin: 0; color: #92400E;">
-                            <strong>Important:</strong> Please arrive at least 15 minutes before your session starts.
-                        </p>
-                    </div>
-                </div>
-            </div>
+<main class="page">
+    <div class="wrap wrap-narrow">
+        <div class="success-hero">
+            <div class="success-icon"><?= icon('check', 40) ?></div>
+            <p class="success-word">Success</p>
+            <h1><?= e('success.title') ?></h1>
+            <p class="muted"><?= e('success.body') ?></p>
         </div>
-    </main>
 
-    <!-- เรียกใช้ไฟล์ Javascript หลัก -->
-    <script src="<?= SITE_URL ?>/assets/js/main.js"></script>
-</body>
-   <!-- FOOTER (Same as Homepage) -->
-    <!-- ส่วนท้ายเว็บไซต์ (Footer) -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
+        <article class="card receipt">
+            <div class="receipt-top">
                 <div>
-                    <span class="footer-logo">HIT THE COURT</span>
-                    <p class="footer-text">
-                        College of Arts, Media and Technology,<br>
-                        Chiang Mai University<br>
-                        © 2026 Hit the Court. All rights reserved.
-                    </p>
+                    <div class="small muted"><?= e('pay.booking_id') ?></div>
+                    <div class="receipt-code"><?= htmlspecialchars($booking['booking_code']) ?></div>
                 </div>
-                
-                <div class="footer-links">
-                    <h4>Menu</h4>
-                    <ul>
-                        <li><a href="<?= SITE_URL ?>/courts">Court Reservation</a></li>
-                        <li><a href="<?= SITE_URL ?>/index#about">About Us</a></li>
-                        <li><a href="<?= SITE_URL ?>/guidebook">Guidebook</a></li>
-                        <li><a href="<?= SITE_URL ?>/reports">Contact Us</a></li>
-                    </ul>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Contact Us</h4>
-                    <ul>
-                        <li><a href="tel:111-222-3"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"></path></svg> 111-222-3</a></li>
-                        <li><a href="mailto:peoplecmucamt@gmail.com"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> peoplecmucamt@gmail.com</a></li>
-                    </ul>
-                </div>
+                <span class="badge badge-success"><?= icon('check-circle', 12) ?> <?= e('status.confirmed') ?></span>
             </div>
-            <div class="footer-bottom">
-                <p>HIT THE COURT</p>
+
+            <div class="card-body">
+                <h3 class="receipt-section"><?= icon('user', 16) ?> <?= e('success.customer') ?></h3>
+                <dl class="kv">
+                    <div class="kv-row"><dt><?= e('form.first_name') ?></dt><dd><?= htmlspecialchars($booking['first_name'] ?: '-') ?></dd></div>
+                    <div class="kv-row"><dt><?= e('form.last_name') ?></dt><dd><?= htmlspecialchars($booking['last_name'] ?: '-') ?></dd></div>
+                    <div class="kv-row"><dt><?= e('form.phone') ?></dt><dd><?= htmlspecialchars($booking['customer_phone'] ?: '-') ?></dd></div>
+                </dl>
+
+                <h3 class="receipt-section"><?= icon('calendar', 16) ?> <?= e('success.details') ?></h3>
+                <dl class="kv">
+                    <div class="kv-row"><dt><?= e('success.sport') ?></dt><dd><?= htmlspecialchars($booking['sport_label']) ?></dd></div>
+                    <div class="kv-row"><dt><?= e('success.court') ?></dt><dd><?= htmlspecialchars($booking['court_label']) ?></dd></div>
+                    <div class="kv-row"><dt><?= e('success.date') ?></dt><dd><?= htmlspecialchars(formatDateLocalized($booking['booking_date'], true)) ?></dd></div>
+                    <div class="kv-row"><dt><?= e('success.time') ?></dt><dd><?= htmlspecialchars($booking['time_label']) ?></dd></div>
+                    <div class="kv-row"><dt><?= e('success.equipment') ?></dt><dd>
+                        <?php if (!$booking['equipment']): ?>-<?php else: foreach ($booking['equipment'] as $eq): ?>
+                            <div><?= htmlspecialchars(LANG === 'th' && $eq['name_th'] ? $eq['name_th'] : $eq['eq_name']) ?> × <?= (int) $eq['quantity'] ?></div>
+                        <?php endforeach; endif; ?>
+                    </dd></div>
+                    <div class="kv-row"><dt><?= e('payment.method') ?></dt><dd><?= e($booking['payment_method'] === 'bank_transfer' ? 'payment.bank' : 'payment.promptpay') ?></dd></div>
+                    <div class="kv-row"><dt><?= e('success.booked_on') ?></dt><dd><?= htmlspecialchars(formatDateLocalized($booking['created_at'])) ?> <?= date('H:i', strtotime($booking['created_at'])) ?></dd></div>
+                </dl>
+
+                <h3 class="receipt-section"><?= icon('receipt', 16) ?> <?= e('success.payment') ?></h3>
+                <dl class="kv">
+                    <?php foreach (bookingPriceRows($booking) as $row): ?>
+                        <div class="kv-row <?= $row[2] ?? '' ?>"><dt><?= htmlspecialchars($row[0]) ?></dt><dd><?= htmlspecialchars($row[1]) ?></dd></div>
+                    <?php endforeach; ?>
+                </dl>
+                <div class="kv-total"><span><?= e('success.paid') ?></span><span class="amount"><?= formatPrice($booking['total_price']) ?></span></div>
+
+                <p class="note mt-3 mb-0"><?= icon('info', 16) ?> <?= e('success.show_at_desk') ?></p>
             </div>
+        </article>
+
+        <div class="row mt-3" style="justify-content:center">
+            <a href="<?= SITE_URL ?>/" class="btn btn-primary"><?= icon('home', 18) ?> <?= e('success.home') ?></a>
+            <a href="<?= SITE_URL ?>/reservations" class="btn btn-outline"><?= icon('list', 18) ?> <?= e('nav.my_bookings') ?></a>
+            <button type="button" class="btn btn-ghost" onclick="window.print()"><?= icon('file', 18) ?> <?= e('success.print') ?></button>
         </div>
-    </footer>
-</html>
+    </div>
+</main>
+<?php include '../includes/footer.php'; ?>
