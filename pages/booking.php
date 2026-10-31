@@ -6,6 +6,16 @@ require_once '../config.php';
 require_once '../includes/court_svg.php';
 requireLogin();
 
+// โหมดแก้ไขการจอง (?edit=ID) ใช้หน้าเดียวกัน แต่เติมข้อมูลเดิมไว้ให้
+$editId = intval($_GET['edit'] ?? 0);
+$editing = null;
+if ($editId) {
+    $editing = loadBookingDetails($pdo, $editId);
+    if (!$editing || (int) $editing['user_id'] !== (int) $_SESSION['user_id'] || !bookingIsEditable($editing)) redirect('/reservations');
+    $_GET['sport_id'] = $editing['sport_id'];
+    if (!isset($_GET['date'])) $_GET['date'] = $editing['booking_date'];
+}
+
 $sportId = intval($_GET['sport_id'] ?? 0);
 $data = $sportId ? loadSportBookingData($pdo, $sportId) : null;
 if (!$data) redirect('/courts');
@@ -26,8 +36,8 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate) || $selectedDate < $toda
 }
 
 // --- สถานะสนาม / อุปกรณ์ของวันที่เลือก ---
-$taken = getTakenSlots($pdo, $sportId, $selectedDate);
-$usage = getEquipmentUsage($pdo, $sportId, $selectedDate);
+$taken = getTakenSlots($pdo, $sportId, $selectedDate, $editId ?: null);
+$usage = getEquipmentUsage($pdo, $sportId, $selectedDate, $editId ?: null);
 $nowTime = date('H:i:s');
 
 $slotState = [];      // [courtId][slotId] => free|taken|past|closed
@@ -68,7 +78,7 @@ include '../includes/head.php';
 
         <header class="booking-head">
             <div>
-                <span class="eyebrow"><?= icon('calendar', 14) ?> <?= e('booking.eyebrow') ?></span>
+                <span class="eyebrow"><?= icon($editId ? 'edit' : 'calendar', 14) ?> <?= $editId ? e('edit.eyebrow', ['code' => $editing['booking_code']]) : e('booking.eyebrow') ?></span>
                 <h1><?= htmlspecialchars($sportName) ?></h1>
                 <div class="meta">
                     <span><?= icon('tag', 16) ?> <?= e('booking.price_per_round', ['price' => formatPrice($sport['price'])]) ?></span>
@@ -88,6 +98,10 @@ include '../includes/head.php';
         </div>
         <?php unset($_SESSION['flash_error']); endif; ?>
 
+        <?php if ($editing): ?>
+        <div class="alert alert-warning mb-3"><?= icon('edit') ?><div><?= $editing['payment_status'] === 'paid' ? e('edit.paid_note') : e('edit.pending_note') ?></div></div>
+        <?php endif; ?>
+
         <?php if (!$isMember): ?>
         <div class="alert alert-info mb-3">
             <?= icon('info') ?>
@@ -100,6 +114,7 @@ include '../includes/head.php';
             <input type="hidden" name="sport_id" value="<?= $sportId ?>">
             <input type="hidden" name="date" value="<?= $selectedDate ?>">
             <input type="hidden" name="court_id" id="courtInput" value="">
+            <?php if ($editId): ?><input type="hidden" name="booking_id" value="<?= $editId ?>"><?php endif; ?>
 
             <div class="stack">
                 <!-- 1. วันที่ -->
@@ -113,7 +128,7 @@ include '../includes/head.php';
                                 $ts = strtotime($d); ?>
                                 <a role="listitem"
                                    class="date-chip<?= $d === $selectedDate ? ' is-active' : '' ?><?= $locked ? ' is-locked' : '' ?>"
-                                   href="<?= $locked ? SITE_URL . '/membership' : '?sport_id=' . $sportId . '&date=' . $d ?>"
+                                   href="<?= $locked ? SITE_URL . '/membership' : '?' . ($editId ? 'edit=' . $editId : 'sport_id=' . $sportId) . '&date=' . $d ?>"
                                    <?= $locked ? 'title="' . e('booking.member_only_day') . '"' : '' ?>>
                                     <span class="dc-day"><?= $i === 0 ? e('booking.today') : htmlspecialchars(LANG === 'th' ? ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'][date('w', $ts)] : date('D', $ts)) ?></span>
                                     <span class="dc-date"><?= date('j', $ts) ?></span>
@@ -237,31 +252,31 @@ include '../includes/head.php';
                         <div class="form-grid">
                             <div class="field">
                                 <label class="label" for="first_name"><?= e('form.first_name') ?></label>
-                                <input class="input" id="first_name" name="first_name" required maxlength="100" autocomplete="given-name" value="<?= htmlspecialchars($user['first_name'] ?? '') ?>">
+                                <input class="input" id="first_name" name="first_name" required maxlength="100" autocomplete="given-name" value="<?= htmlspecialchars($editing['first_name'] ?? $user['first_name'] ?? '') ?>">
                             </div>
                             <div class="field">
                                 <label class="label" for="last_name"><?= e('form.last_name') ?></label>
-                                <input class="input" id="last_name" name="last_name" required maxlength="100" autocomplete="family-name" value="<?= htmlspecialchars($user['last_name'] ?? '') ?>">
+                                <input class="input" id="last_name" name="last_name" required maxlength="100" autocomplete="family-name" value="<?= htmlspecialchars($editing['last_name'] ?? $user['last_name'] ?? '') ?>">
                             </div>
                             <div class="field">
                                 <label class="label" for="phone"><?= e('form.phone') ?></label>
                                 <input class="input" id="phone" name="phone" type="tel" required maxlength="20" autocomplete="tel" inputmode="tel"
-                                       pattern="[0-9+\-\s]{9,20}" title="<?= e('err.phone_invalid') ?>" value="<?= htmlspecialchars($user['phone'] ?? '') ?>">
+                                       pattern="[0-9+\-\s]{9,20}" title="<?= e('err.phone_invalid') ?>" value="<?= htmlspecialchars($editing['phone'] ?? $user['phone'] ?? '') ?>">
                             </div>
                             <div class="field">
                                 <label class="label" for="email"><?= e('form.email') ?></label>
-                                <input class="input" id="email" name="email" type="email" required maxlength="100" autocomplete="email" value="<?= htmlspecialchars($user['email'] ?? '') ?>">
+                                <input class="input" id="email" name="email" type="email" required maxlength="100" autocomplete="email" value="<?= htmlspecialchars($editing['email'] ?? $user['email'] ?? '') ?>">
                             </div>
                         </div>
 
                         <p class="label mt-3 mb-1"><?= e('payment.method') ?></p>
                         <div class="choices">
                             <label class="choice">
-                                <input type="radio" name="payment_method" value="promptpay" checked>
+                                <input type="radio" name="payment_method" value="promptpay" <?= ($editing['payment_method'] ?? 'promptpay') !== 'bank_transfer' ? 'checked' : '' ?>>
                                 <span class="choice-box"><span class="choice-icon"><?= icon('qr') ?></span><span><strong><?= e('payment.promptpay') ?></strong><small><?= e('payment.promptpay_desc') ?></small></span></span>
                             </label>
                             <label class="choice">
-                                <input type="radio" name="payment_method" value="bank_transfer">
+                                <input type="radio" name="payment_method" value="bank_transfer" <?= ($editing['payment_method'] ?? '') === 'bank_transfer' ? 'checked' : '' ?>>
                                 <span class="choice-box"><span class="choice-icon"><?= icon('bank') ?></span><span><strong><?= e('payment.bank') ?></strong><small><?= e('payment.bank_desc') ?></small></span></span>
                             </label>
                         </div>
@@ -276,7 +291,7 @@ include '../includes/head.php';
                     <div class="card-body">
                         <div id="summary" aria-live="polite"><p class="muted mb-0"><?= e('booking.summary_empty') ?></p></div>
 
-                        <?php if ($isMember): ?>
+                        <?php if ($isMember && !$editId): ?>
                         <label class="points-toggle<?= (int) $user['points'] >= POINTS_FOR_FREE_ROUND ? '' : ' is-disabled' ?>">
                             <input type="checkbox" name="use_points" value="1" <?= (int) $user['points'] >= POINTS_FOR_FREE_ROUND ? '' : 'disabled' ?>>
                             <span><?= icon('trophy', 16) ?> <?= e('booking.use_points', ['points' => (int) $user['points'], 'need' => POINTS_FOR_FREE_ROUND]) ?></span>
@@ -284,7 +299,7 @@ include '../includes/head.php';
                         <?php endif; ?>
 
                         <button type="submit" class="btn btn-primary btn-lg btn-block mt-2" id="submitBtn" disabled>
-                            <?= e('booking.continue') ?> <?= icon('arrow-right', 18) ?>
+                            <?= $editId ? e('edit.submit') : e('booking.continue') ?> <?= icon('arrow-right', 18) ?>
                         </button>
                         <p class="hint center mt-1 mb-0"><?= e('booking.hold_note', ['min' => BOOKING_HOLD_MINUTES]) ?></p>
                     </div>
@@ -305,6 +320,11 @@ window.BOOKING = {
     quoteUrl: <?= json_encode(SITE_URL . '/api/quote.php') ?>,
     isMember: <?= $isMember ? 'true' : 'false' ?>,
     equipment: <?= json_encode($equipmentJs) ?>,
+    preset: <?= json_encode($editing && $editing['booking_date'] === $selectedDate ? [
+        'court' => (string) $editing['court_id'],
+        'slots' => array_map(fn($s) => (string) $s['slot_id'], $editing['slots']),
+        'equipment' => array_column($editing['equipment'], 'quantity', 'eq_id'),
+    ] : ($editing ? ['court' => null, 'slots' => [], 'equipment' => array_column($editing['equipment'], 'quantity', 'eq_id')] : null)) ?>,
     text: {
         selectCourt: <?= json_encode(t('booking.summary_empty')) ?>,
         error: <?= json_encode(t('err.generic')) ?>

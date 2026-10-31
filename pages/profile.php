@@ -1,280 +1,165 @@
 <?php
-// ดึงเอาไฟล์ตั้งค่าระบบ (config) เข้ามาก่อน
+// pages/profile.php
+// ข้อมูลบัญชี: ชื่อผู้ใช้, รหัสผ่าน, อีเมล, สถานะสมาชิก + วันหมดอายุ, เบอร์โทร และปุ่มแก้ไข
 require_once '../config.php';
-// เช็คเลยว่าล็อกอินแล้วยัง? ถ้ายังไม่ล็อกอินก็ไม่ให้เข้าหน้านี้
 requireLogin();
 
-// ไปดึงข้อมูล "ฉัน" (User ที่ล็อกอินอยู่) จากฐานข้อมูลมาเก็บไว้ในตัวแปร $user
- $userStmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
- $userStmt->execute([$_SESSION['user_id']]);
- $user = $userStmt->fetch();
+$load = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
+$load->execute([$_SESSION['user_id']]);
+$user = $load->fetch();
+if (!$user) redirect('/api/auth.php?action=logout');
 
-// เตรียมตัวแปรไว้เก็บข้อความสำเร็จ และข้อผิดพลาด
- $success = '';
- $errors = [];
+$errors = [];
+$success = null;
+$action = $_POST['action'] ?? '';
 
-// ถ้ากดปุ่มบันทึก (Method POST)
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // รับค่าจากฟอร์มและทำความสะอาดข้อมูล (sanitize) ก่อน
-    $email = sanitize($_POST['email'] ?? '');
-    $phone = sanitize($_POST['phone'] ?? '');
-    $newPassword = $_POST['new_password'] ?? '';
-    $confirmPassword = $_POST['confirm_password'] ?? '';
-
-    // เช็คเบื้องต้นว่ากรอก Email และ Phone หรือยัง
-    if (empty($email)) $errors['email'] = 'Email is required';
-    if (empty($phone)) $errors['phone'] = 'Phone is required';
-
-    // ถ้ามีการกรอกรหัสผ่านใหม่เข้ามา
-    if (!empty($newPassword)) {
-        // เช็คว่ารหัสผ่านสั้นไปไหม (ต้องมากกว่าหรือเท่ากับ 8 ตัว)
-        if (strlen($newPassword) <= 8) {
-            $errors['new_password'] = 'Password must be at least 8 characters';
-        }
-        // เช็คว่ารหัสผ่านใหม่ กับ ช่องยืนยันรหัสผ่าน ตรงกันไหม (เช็คแยกอิสระ)
-        if ($newPassword !== $confirmPassword) {
-            $errors['confirm_password'] = 'Passwords do not match';
-        }
+if ($action === 'details') {
+    $firstName = trim($_POST['first_name'] ?? '');
+    $lastName = trim($_POST['last_name'] ?? '');
+    $email = trim($_POST['email'] ?? '');
+    $phone = trim($_POST['phone'] ?? '');
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) $errors[] = t('err.email_invalid');
+    if (!preg_match('/^[0-9+\-\s]{9,20}$/', $phone)) $errors[] = t('err.phone_invalid');
+    $dup = $pdo->prepare("SELECT 1 FROM users WHERE email = ? AND user_id <> ?");
+    $dup->execute([$email, $user['user_id']]);
+    if ($dup->fetchColumn()) $errors[] = t('auth.err_email_taken');
+    if (!$errors) {
+        $pdo->prepare("UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ? WHERE user_id = ?")
+            ->execute([$firstName ?: null, $lastName ?: null, $email, $phone, $user['user_id']]);
+        $success = t('profile.saved');
     }
-
-    // ถ้าผ่านการตรวจสอบทั้งหมด (ไม่มี error)
-    if (empty($errors)) {
-        // ถ้ามีการตั้งรหัสผ่านใหม่
-        if (!empty($newPassword)) {
-            // เข้ารหัสรหัสผ่านใหม่ให้ปลอดภัย
-            $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
-            // อัปเดตข้อมูลทั้ง Email, Phone และ Password ใหม่
-            $stmt = $pdo->prepare("UPDATE users SET email = ?, phone = ?, password = ? WHERE user_id = ?");
-            $stmt->execute([$email, $phone, $hashedPassword, $_SESSION['user_id']]);
-        } else {
-            // ถ้าไม่ได้เปลี่ยนรหัสผ่าน อัปเดตแค่ Email กับ Phone
-            $stmt = $pdo->prepare("UPDATE users SET email = ?, phone = ? WHERE user_id = ?");
-            $stmt->execute([$email, $phone, $_SESSION['user_id']]);
-        }
-        // ตั้งค่าข้อความสำเร็จ
-        $success = 'Profile updated successfully!';
-        // ดึงข้อมูล User ใหม่มาแสดงผล (Refresh ข้อมูล)
-        $userStmt->execute([$_SESSION['user_id']]);
-        $user = $userStmt->fetch();
+} elseif ($action === 'password') {
+    $current = $_POST['current_password'] ?? '';
+    $new = $_POST['new_password'] ?? '';
+    if (!password_verify($current, $user['password'])) $errors[] = t('profile.err_current');
+    if (strlen($new) < 8) $errors[] = t('auth.err_password_short');
+    if ($new !== ($_POST['confirm_password'] ?? '')) $errors[] = t('auth.err_password_match');
+    if (!$errors) {
+        $pdo->prepare("UPDATE users SET password = ? WHERE user_id = ?")->execute([password_hash($new, PASSWORD_DEFAULT), $user['user_id']]);
+        $success = t('profile.password_saved');
     }
 }
+if ($action && !$errors) {
+    $load->execute([$_SESSION['user_id']]);
+    $user = $load->fetch();
+}
+
+$isMember = isActiveMember($user);
+$daysLeft = $isMember ? (int) ceil((strtotime($user['member_expire']) - strtotime(date('Y-m-d'))) / 86400) : 0;
+$points = (int) $user['points'];
+
+$pageTitle = t('profile.title');
+include '../includes/head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile - Hit The Court</title>
-    <!-- โหลด Font และ CSS มาแต่งหน้าตาเว็บ -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/home.css">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/profile.css">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-</head>
-<body style="background: #F1F5F9;">
+<main class="page">
+    <div class="wrap">
+        <header class="page-head">
+            <span class="eyebrow"><?= icon('user', 14) ?> <?= e('nav.profile') ?></span>
+            <h1><?= e('profile.title') ?></h1>
+        </header>
 
- <!-- NAVBAR -->
-<?php include __DIR__ . '/../includes/navbar.php'; ?>
+        <?php if ($success): ?><div class="alert alert-success mb-3" role="status"><?= icon('check-circle') ?><div><?= htmlspecialchars($success) ?></div></div><?php endif; ?>
+        <?php if ($errors): ?><div class="alert alert-danger mb-3" role="alert"><?= icon('alert') ?><ul><?php foreach ($errors as $err): ?><li><?= htmlspecialchars($err) ?></li><?php endforeach; ?></ul></div><?php endif; ?>
 
-    <!-- Main Content -->
-    <!-- ส่วนเนื้อหาหลักของหน้าโปรไฟล์ -->
-    <div class="profile-container">
-
-        <!-- ส่วนหัวของโปรไฟล์: แสดงรูปใหญ่ ชื่อ และอีเมล -->
-        <div class="profile-header">
-            <div class="profile-avatar-large">
-                <!-- แสดงอักษรตัวแรกของชื่อเป็น Avatar ขนาดใหญ่ -->
-                <?= strtoupper(substr($user['username'], 0, 1)) ?>
-            </div>
-            <div class="profile-info">
-                <h1><?= htmlspecialchars($user['username']) ?></h1>
-                <p><?= htmlspecialchars($user['email']) ?></p>
-                <!-- ถ้าเป็นสมาชิก Premium และยังไม่หมดอายุ จะแสดงป้ายสถานะ -->
-                <?php if ($user['is_member'] && $user['member_expire'] > date('Y-m-d')): ?>
-                    <div class="member-badge-profile">
-                        ⭐ Premium Member (Until <?= date('d M Y', strtotime($user['member_expire'])) ?>)
-                    </div>
-                <?php endif; ?>
-            </div>
-        </div>
-
-        <!-- ถ้ามีข้อความสำเร็จ (จากการกด Save) จะแสดงกล่องสีเขียวตรงนี้ -->
-        <?php if ($success): ?>
-        <div class="alert-success-profile">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-            <?= $success ?>
-        </div>
-        <?php endif; ?>
-
-        <!-- แบ่งเนื้อหาเป็น 2 คอลัมน์ -->
-        <div class="profile-grid">
-
-            <!-- ฝั่งซ้าย: แสดงสถิติต่างๆ -->
-            <div>
-                <div class="profile-card">
-                    <div class="card-header">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"></path></svg>
-                        <h3>My Stats</h3>
-                    </div>
+        <div class="split">
+            <div class="stack">
+                <form method="POST" class="card" data-once>
+                    <input type="hidden" name="action" value="details">
+                    <div class="card-head"><h2><?= icon('user', 18) ?> <?= e('profile.account') ?></h2></div>
                     <div class="card-body">
-                        <!-- แสดงจำนวนการจองและแต้มสะสม -->
-                        <div class="stats-grid">
-                            <div class="stat-box">
-                                <div class="stat-number"><?= $user['total_bookings'] ?? 0 ?></div>
-                                <div class="stat-label">Total Bookings</div>
+                        <div class="form-grid">
+                            <div class="field">
+                                <label class="label" for="username"><?= e('auth.username') ?></label>
+                                <input class="input" id="username" value="<?= htmlspecialchars($user['username']) ?>" readonly>
+                                <span class="hint"><?= e('profile.username_fixed') ?></span>
                             </div>
-                            <div class="stat-box">
-                                <div class="stat-number"><?= $user['points'] ?? 0 ?></div>
-                                <div class="stat-label">Reward Points</div>
+                            <div class="field">
+                                <span class="label"><?= e('auth.password') ?></span>
+                                <input class="input" value="••••••••" readonly aria-label="<?= e('auth.password') ?>">
+                                <a href="#password" class="hint"><?= e('profile.change_password') ?></a>
+                            </div>
+                            <div class="field">
+                                <label class="label" for="first_name"><?= e('form.first_name') ?></label>
+                                <input class="input" id="first_name" name="first_name" maxlength="100" value="<?= htmlspecialchars($user['first_name'] ?? '') ?>">
+                            </div>
+                            <div class="field">
+                                <label class="label" for="last_name"><?= e('form.last_name') ?></label>
+                                <input class="input" id="last_name" name="last_name" maxlength="100" value="<?= htmlspecialchars($user['last_name'] ?? '') ?>">
+                            </div>
+                            <div class="field">
+                                <label class="label" for="email"><?= e('form.email') ?></label>
+                                <input class="input" id="email" name="email" type="email" required maxlength="100" value="<?= htmlspecialchars($user['email']) ?>">
+                            </div>
+                            <div class="field">
+                                <label class="label" for="phone"><?= e('form.phone') ?></label>
+                                <input class="input" id="phone" name="phone" type="tel" required maxlength="20" pattern="[0-9+\-\s]{9,20}" title="<?= e('err.phone_invalid') ?>" value="<?= htmlspecialchars($user['phone'] ?? '') ?>">
                             </div>
                         </div>
+                        <button type="submit" class="btn btn-primary mt-3"><?= icon('check', 18) ?> <?= e('profile.change') ?></button>
                     </div>
-                </div>
-            </div>
+                </form>
 
-            <!-- ฝั่งขวา: ฟอร์มแก้ไขข้อมูลส่วนตัว -->
-            <div>
-                <div class="profile-card">
-                    <div class="card-header">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
-                        <h3>Account Details</h3>
-                    </div>
+                <form method="POST" class="card" id="password" data-once>
+                    <input type="hidden" name="action" value="password">
+                    <div class="card-head"><h2><?= icon('lock', 18) ?> <?= e('profile.change_password') ?></h2></div>
                     <div class="card-body">
-                        <form method="POST" action="">
-                            <!-- ช่อง Username ปิดไว้ไม่ให้แก้ (disabled) -->
-                            <div class="form-group-profile">
-                                <label class="form-label">Username</label>
-                                <input type="text" class="form-input-profile" value="<?= htmlspecialchars($user['username']) ?>" disabled>
+                        <div class="field">
+                            <label class="label" for="current_password"><?= e('profile.current_password') ?></label>
+                            <input class="input" id="current_password" name="current_password" type="password" required autocomplete="current-password">
+                        </div>
+                        <div class="form-grid mt-2">
+                            <div class="field">
+                                <label class="label" for="new_password"><?= e('profile.new_password') ?></label>
+                                <input class="input" id="new_password" name="new_password" type="password" required minlength="8" autocomplete="new-password">
+                                <span class="hint"><?= e('auth.password_hint') ?></span>
                             </div>
-                            <!-- ช่อง Email -->
-                            <div class="form-group-profile">
-                                <label class="form-label">Email Address</label>
-                                <input type="email" name="email" class="form-input-profile" value="<?= htmlspecialchars($user['email']) ?>" required>
-                                <!-- ถ้ามี Error เรื่อง Email จะแสดงตรงนี้ -->
-                                <?php if (isset($errors['email'])): ?>
-                                    <small style="color: var(--error);"><?= $errors['email'] ?></small>
-                                <?php endif; ?>
+                            <div class="field">
+                                <label class="label" for="confirm_password"><?= e('auth.confirm_password') ?></label>
+                                <input class="input" id="confirm_password" name="confirm_password" type="password" required minlength="8" autocomplete="new-password">
                             </div>
-                            <!-- ช่องเบอร์โทร -->
-                            <div class="form-group-profile">
-                                <label class="form-label">Phone Number</label>
-                                <input type="tel" name="phone" class="form-input-profile" value="<?= htmlspecialchars($user['phone']) ?>" required>
-                            </div>
-                            <hr style="margin: 2rem 0; border-color: var(--gray-100);">
-                            <h4 style="margin-bottom: 1rem; font-size: 1rem;">Change Password</h4>
-                            <!-- ช่องรหัสผ่านใหม่ (ถ้าไม่กรอกคือไม่เปลี่ยน) -->
-                            <div class="form-group-profile">
-                                <label class="form-label">New Password</label>
-                                <input type="password" name="new_password"
-                                    class="form-input-profile <?= isset($errors['new_password']) ? 'input-error' : '' ?>"
-                                    placeholder="Leave blank to keep current">
-                                <?php if (isset($errors['new_password'])): ?>
-                                    <small style="color: #FF4A4A;"><?= $errors['new_password'] ?></small>
-                                <?php endif; ?>
-                            </div>
-                            <!-- ช่องยืนยันรหัสผ่านใหม่ -->
-                            <div class="form-group-profile">
-                                <label class="form-label">Confirm New Password</label>
-                                <input type="password" name="confirm_password"
-                                    class="form-input-profile <?= isset($errors['confirm_password']) ? 'input-error' : '' ?>"
-                                    placeholder="Confirm new password">
-                                <?php if (isset($errors['confirm_password'])): ?>
-                                    <small style="color: #FF4A4A;"><?= $errors['confirm_password'] ?></small>
-                                <?php endif; ?>
-                            </div>
-                            <!-- ปุ่มบันทึก -->
-                            <button type="submit" class="btn-save">Save Changes</button>
-                        </form>
+                        </div>
+                        <button type="submit" class="btn btn-dark mt-3"><?= icon('lock', 18) ?> <?= e('profile.change_password') ?></button>
                     </div>
-                </div>
+                </form>
             </div>
 
+            <aside class="stack sticky">
+                <div class="card card-pad member-card <?= $isMember ? 'is-member' : '' ?>">
+                    <div class="row-between">
+                        <span class="badge <?= $isMember ? 'badge-gold' : '' ?>"><?= icon('crown', 12) ?> <?= $isMember ? e('profile.member') : e('profile.not_member') ?></span>
+                    </div>
+                    <?php if ($isMember): ?>
+                        <h2 class="mt-2 mb-1"><?= e('profile.member_until', ['date' => formatDateLocalized($user['member_expire'])]) ?></h2>
+                        <p class="muted mb-0"><?= e('profile.days_left', ['n' => $daysLeft]) ?></p>
+                    <?php else: ?>
+                        <h2 class="mt-2 mb-1"><?= e('profile.join_title') ?></h2>
+                        <p class="muted"><?= e('profile.join_body') ?></p>
+                        <a href="<?= SITE_URL ?>/membership" class="btn btn-primary btn-block"><?= e('courts.promo_cta') ?></a>
+                    <?php endif; ?>
+                </div>
+
+                <div class="card card-pad">
+                    <h3 class="row"><?= icon('trophy', 18) ?> <?= e('profile.points') ?></h3>
+                    <div class="points-big"><?= $points % POINTS_FOR_FREE_ROUND ?><span>/<?= POINTS_FOR_FREE_ROUND ?></span></div>
+                    <div class="progress"><span style="width: <?= min(100, ($points % POINTS_FOR_FREE_ROUND) * 100 / POINTS_FOR_FREE_ROUND) ?>%"></span></div>
+                    <p class="muted small mt-1 mb-0">
+                        <?= e('profile.points_total', ['n' => $points]) ?>
+                        <?php if ($points >= POINTS_FOR_FREE_ROUND): ?> · <strong class="text-success"><?= e('profile.points_ready') ?></strong><?php endif; ?>
+                    </p>
+                    <dl class="kv mt-2">
+                        <div class="kv-row"><dt><?= e('profile.total_bookings') ?></dt><dd><?= (int) $user['total_bookings'] ?></dd></div>
+                        <div class="kv-row"><dt><?= e('profile.joined') ?></dt><dd><?= htmlspecialchars(formatDateLocalized($user['created_at'])) ?></dd></div>
+                    </dl>
+                </div>
+            </aside>
         </div>
     </div>
-
-   <!-- FOOTER (Same as Homepage) -->
-    <!-- ส่วนท้ายเว็บไซต์ (Footer) -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div>
-                    <span class="footer-logo">HIT THE COURT</span>
-                    <p class="footer-text">
-                        College of Arts, Media and Technology,<br>
-                        Chiang Mai University<br>
-                        © 2026 Hit the Court. All rights reserved.
-                    </p>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Menu</h4>
-                    <ul>
-                        <li><a href="<?= SITE_URL ?>/courts">Court Reservation</a></li>
-                        <li><a href="<?= SITE_URL ?>/index#about">About Us</a></li>
-                        <li><a href="<?= SITE_URL ?>/guidebook">Guidebook</a></li>
-                        <li><a href="<?= SITE_URL ?>/reports">Contact Us</a></li>
-                    </ul>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Contact Us</h4>
-                    <ul>
-                        <li><a href="tel:111-222-3"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"></path></svg> 111-222-3</a></li>
-                        <li><a href="mailto:peoplecmucamt@gmail.com"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> peoplecmucamt@gmail.com</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>HIT THE COURT</p>
-            </div>
-        </div>
-    </footer>
-
-    <!-- Javascript สำหรับจัดการเมนูบนมือถือ -->
-    <script>
-    document.addEventListener('DOMContentLoaded', function () {
-        const toggleBtn = document.querySelector('.mobile-toggle');
-        const navbar    = document.getElementById('navbar');
-        const userMenu  = document.querySelector('.user-menu');
-        const body      = document.body;
-
-        // ถ้ากดปุ่ม Hamburger
-        if (toggleBtn && navbar) {
-            toggleBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                // ให้เปิด/ปิดเมนู
-                navbar.classList.toggle('menu-open');
-                // ล็อค scroll ตัว body เวลาเมนูเปิดอยู่
-                body.style.overflow = navbar.classList.contains('menu-open') ? 'hidden' : '';
-            });
-        }
-
-        // จัดการเวลากดเมนู User (บนมือถือ)
-        if (userMenu) {
-            userMenu.querySelector('.user-btn').addEventListener('click', function (e) {
-                // ถ้าหน้าจอแคบกว่า 768px
-                if (window.innerWidth <= 768) {
-                    e.stopPropagation();
-                    // ให้เปิด/ปิด Dropdown
-                    userMenu.classList.toggle('active');
-                }
-            });
-        }
-
-        // เวลากดพื้นที่นอกเมนู ให้ปิดเมนูทั้งหมด
-        document.addEventListener('click', function (e) {
-            if (navbar?.classList.contains('menu-open') && !navbar.contains(e.target)) {
-                navbar.classList.remove('menu-open');
-                body.style.overflow = '';
-            }
-            if (userMenu?.classList.contains('active') && !userMenu.contains(e.target)) {
-                userMenu.classList.remove('active');
-            }
-        });
-    });
-    </script>
-
-</body>
-</html>
+</main>
+<style>
+.member-card.is-member { background: linear-gradient(135deg, #FFFBEB, #fff); border-color: #FDE68A; }
+.points-big { font-family: var(--font-display); font-size: 2.6rem; font-weight: 700; color: var(--c-ink); line-height: 1; }
+.points-big span { font-size: 1.2rem; color: var(--c-muted); }
+.progress { height: 10px; border-radius: 999px; background: #E2E8F0; overflow: hidden; margin-top: 10px; }
+.progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--c-gold), #F97316); border-radius: inherit; }
+</style>
+<?php include '../includes/footer.php'; ?>

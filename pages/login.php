@@ -1,153 +1,60 @@
 <?php
-// เริ่มแรกสุดเลย คือดึงเอาไฟล์ตั้งค่าต่างๆ (เช่น การเชื่อมฐานข้อมูล, ฟังก์ชันช่วยเหลือ) มาใช้งานก่อน
+// pages/login.php
+// เข้าสู่ระบบ: ช่องชื่อผู้ใช้ (หรืออีเมล), รหัสผ่าน, ปุ่ม Log In, ลิงก์ไปหน้าสมัคร และข้อความแจ้งเตือนเมื่อกรอกผิด
 require_once '../config.php';
 
-// Redirect if already logged in
-// เช็คดูก่อนว่า "เอ้ย คนนี้ล็อกอินอยู่แล้วหรือยัง?" ถ้าใช่ ก็ไม่ต้องให้มากรอกฟอร์มอีก ส่งตัวไปหน้าหลักเลย
-if (isLoggedIn()) {
-     redirect('index.php');
-}
+$next = safeNextUrl($_GET['next'] ?? $_POST['next'] ?? null);
+if (isLoggedIn()) redirect($next);
 
- // สร้างตัวแปรเก็บข้อความ error เตรียมไว้ก่อน เผื่อไว้ด่าเวลาผู้ใช้กรอกอะไรผิดๆ
- $error = '';
-
-// Handle login form
-// ตรงนี้คือจุดสำคัญ เช็คว่า "มีคนกดปุ่ม Login ส่งข้อมูลมาหรือยัง?" (Method POST)
+$error = '';
+$username = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    // ถ้ามาแล้ว ก็เอาข้อมูลที่ส่งมาเก็บใส่ตัวแปร และอย่าลืม "sanitize" คือทำความสะอาดข้อมูล username ด้วยกันคนใจร้ายแอบใส่โค้ดมุดเข้ามา
-    $username = sanitize($_POST['username'] ?? '');
-    // ส่วนรหัสผ่านเอามาเลย ยังไม่ต้องทำอะไร
+    $username = trim($_POST['username'] ?? '');
     $password = $_POST['password'] ?? '';
-    
-    // เช็คความป่าวๆ ก่อน: "เฮ้ย กรอกครบไหม?" ถ้าเว้นวรรคไว้ก็ด่าทันที
-    if (empty($username) || empty($password)) {
-        $error = 'Please fill in all fields';
+    if ($username === '' || $password === '') {
+        $error = t('auth.err_fill_all');
     } else {
-        // ถ้ากรอกครบแล้ว ก็ไปถามฐานข้อมูลเลยว่า "มี User นี้ไหม?" (ค้นหาจาก username หรือ email ก็ได้)
         $stmt = $pdo->prepare("SELECT * FROM users WHERE username = ? OR email = ?");
         $stmt->execute([$username, $username]);
-        // ดึงข้อมูล user ออกมา
         $user = $stmt->fetch();
-        
-        // เจอ User แล้วเหรอ? ถ้าเจอ ก็มาต่อว่า "รหัสผ่านที่กรอกมาตรงกับที่เข้ารหัสไว้ในระบบไหม?"
-        // ใช้ password_verify ในการเทียบรหัสผ่านแบบปลอดภัย
         if ($user && password_verify($password, $user['password'])) {
-            // โอเค ผ่านเลย! รหัสถูกต้อง ก็ทำการ "จดจำ" ตัวตนของเขาไว้ใน Session
-            // เอา ID, Username และสถานะ Member ไปเก็บไว้ เพื่อจะได้รู้ว่าใครล็อกอินอยู่
+            session_regenerate_id(true); // กัน session fixation
             $_SESSION['user_id'] = $user['user_id'];
             $_SESSION['username'] = $user['username'];
             $_SESSION['is_member'] = $user['is_member'];
-            
-            // จบขั้นตอน ส่งตัวไปหน้าหลัก (Index) ทันที
-            redirect(SITE_URL . '/');
-        } else {
-            // แต่ถ้าหา User ไม่เจอ หรือรหัสผ่านผิด ก็แจ้งเตือนว่า "ข้อมูลไม่ถูกต้อง"
-            $error = 'Invalid username or password';
+            redirect($next);
         }
+        $error = t('auth.err_invalid');
     }
 }
+
+$authTitle = t('auth.login_title');
+$authSubtitle = t('auth.login_subtitle');
+include '../includes/auth_layout_top.php';
 ?>
+<?php if (!empty($_GET['registered'])): ?>
+    <div class="alert alert-success mb-2" role="status"><?= icon('check-circle') ?><div><?= e('auth.registered') ?></div></div>
+<?php endif; ?>
+<?php if ($error): ?>
+    <div class="alert alert-danger mb-2" role="alert"><?= icon('alert') ?><div><?= htmlspecialchars($error) ?></div></div>
+<?php endif; ?>
 
-<!-- ตรงนี้เริ่มส่วนของ HTML หน้าตาเว็บไซต์ละ -->
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- ตั้งชื่อหน้าเว็บว่า Login - Hit The Court -->
-    <title>Login - Hit The Court</title>
-    
-    <!-- Google Fonts -->
-    <!-- ดึงฟอนต์สวยๆ จาก Google มาใช้ 2 ตัวคือ Inter กับ Space Grotesk -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- NEW CSS File -->
-    <!-- เรียกไฟล์ CSS มาแต่งหน้าตาให้สวยงาม -->
-    <link rel="stylesheet" href="../auth.css">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-</head>
-<body>
-
-    <!-- สร้างกล่องหลักครอบทุกอย่างไว้ -->
-    <div class="auth-wrapper">
-        <!-- Left Side: Hero / Branding -->
-        <!-- ส่วนนี้คือ "ฝั่งซ้าย" ของหน้าจอ มีไว้อวดโฉมแบรนด์ -->
-        <div class="auth-hero">
-            <!-- รูปพื้นหลังสวยๆ สนามเทนนิส -->
-            <img src="https://images.unsplash.com/photo-1551698618-1dfe5d97d256?auto=format&fit=crop&w=800&q=80" alt="Tennis Court" class="auth-hero-bg">
-            
-            <div class="auth-hero-content">
-                <!-- โลโก้ใหญ่ HIT THE COURT -->
-                <div class="auth-hero-logo">
-                    HIT THE <span>COURT</span>
-                </div>
-                <!-- หัวข้อต้อนรับ -->
-                <h1 class="auth-hero-title">Welcome to Hit The Court</h1>
-                <!-- ข้อความก่อนใจ ประมาณว่า มาจองสนามกันเถอะ -->
-                <p class="auth-hero-subtitle">
-                    Where every match begins with your decision.<br>
-                    Log in to secure your spot and own the game.
-                </p>
-            </div>
-        </div>
-
-        <!-- Right Side: Login Form -->
-        <!-- ส่วนนี้คือ "ฝั่งขวา" คือฟอร์มสำหรับกรอกข้อมูลล็อกอิน -->
-        <div class="auth-form-container">
-            <div class="auth-form-box">
-                <!-- หัวข้อฟอร์ม -->
-                <div class="auth-header">
-                    <h2 class="auth-title">Welcome Back</h2>
-                    <p class="auth-subtitle">Please log in to your account</p>
-                </div>
-                
-                <!-- ตรงนี้คือช่องแจ้งเตือน: ถ้ามี error จากการกรอกผิดด้านบน ก็จะโชว์กล่องแดงๆ ตรงนี้ -->
-                <?php if ($error): ?>
-                <div class="alert-error">
-                    <?= htmlspecialchars($error) ?>
-                </div>
-                <?php endif; ?>
-
-                <!-- เริ่มฟอร์มกรอกข้อมูล -->
-                <form method="POST">
-                    <!-- ช่องแรก: ให้กรอก Username หรือ Email -->
-                    <div class="form-group">
-                        <label class="form-label" for="username">Username or Email</label>
-                        <input type="text" 
-                               class="form-input" 
-                               id="username" 
-                               name="username" 
-                               placeholder="Enter your username or email"
-                               value="<?= htmlspecialchars($_POST['username'] ?? '') ?>"
-                               required>
-                    </div>
-                    
-                    <!-- ช่องที่สอง: รหัสผ่าน (ปิดบังรหัสด้วย type="password") -->
-                    <div class="form-group">
-                        <label class="form-label" for="password">Password</label>
-                        <input type="password" 
-                               class="form-input" 
-                               id="password" 
-                               name="password" 
-                               placeholder="Enter your password"
-                               required>
-                    </div>
-                    
-                    <!-- ปุ่มกด "LOGIN" เพื่อส่งข้อมูล -->
-                    <button type="submit" class="btn-primary">
-                        LOGIN
-                    </button>
-                </form>
-                
-                <!-- ส่วนท้ายฟอร์ม: ถ้าใครยังไม่มีบัญชี ก็มีลิงก์ให้ไปสมัคร -->
-                <div class="auth-footer">
-                    <p>don't have an account? <a href="<?= SITE_URL ?>/register">sign up here</p>
-                </div>
-            </div>
+<form method="POST" novalidate data-once>
+    <input type="hidden" name="next" value="<?= htmlspecialchars($next) ?>">
+    <div class="field">
+        <label class="label" for="username"><?= e('auth.username_or_email') ?></label>
+        <input class="input" id="username" name="username" required autocomplete="username" autofocus value="<?= htmlspecialchars($username) ?>" placeholder="<?= e('auth.username_ph') ?>">
+        <span class="hint"><?= e('auth.username_login_hint') ?></span>
+    </div>
+    <div class="field">
+        <label class="label" for="password"><?= e('auth.password') ?></label>
+        <div class="password-wrap">
+            <input class="input" id="password" name="password" type="password" required autocomplete="current-password" placeholder="<?= e('auth.password_ph') ?>">
+            <button type="button" class="pw-toggle" aria-label="<?= e('auth.show_password') ?>" data-pw="#password"><?= icon('eye', 18) ?></button>
         </div>
     </div>
+    <button type="submit" class="btn btn-primary btn-lg btn-block mt-3"><?= e('auth.login_btn') ?></button>
+</form>
 
-</body>
-</html>
+<p class="center mt-3 mb-0 muted"><?= e('auth.no_account') ?> <a href="<?= SITE_URL ?>/register<?= $next !== '/' ? '?next=' . urlencode($next) : '' ?>" class="strong"><?= e('auth.register_link') ?></a></p>
+<?php include '../includes/auth_layout_bottom.php'; ?>

@@ -1,0 +1,56 @@
+/* =====================================================
+   หน้าล็อกอิน / สมัครสมาชิก
+   ===================================================== */
+.auth-shell { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 100vh; min-height: 100dvh; }
+.auth-form-side { display: flex; flex-direction: column; padding: clamp(20px, 4vw, 40px); background: #fff; }
+.auth-topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.auth-logo { font-family: var(--font-display); font-weight: 700; font-size: 1.3rem; color: var(--c-ink) !important; text-decoration: none; }
+.auth-logo span { color: var(--c-primary); }
+.auth-lang { display: flex; padding: 3px; border: 1px solid var(--c-border); border-radius: 999px; }
+.auth-lang a { padding: 4px 10px; border-radius: 999px; color: var(--c-muted) !important; font-size: .75rem; font-weight: 700; text-decoration: none; }
+.auth-lang a.is-active { background: var(--c-ink); color: #fff !important; }
+.auth-box { width: 100%; max-width: 420px; margin: auto; padding: 32px 0; }
+.auth-box .field + .field { margin-top: 16px; }
+.auth-back { margin: 0 auto; }
+.password-wrap { position: relative; }
+.password-wrap .input { padding-right: 48px; }
+.pw-toggle {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+    display: grid; place-items: center; width: 40px; height: 40px;
+    border: 0; border-radius: 10px; background: transparent; color: var(--c-muted); cursor: pointer;
+}
+.pw-toggle:hover, .pw-toggle.is-on { color: var(--c-primary); background: var(--c-primary-soft); }
+.input.is-invalid { border-color: var(--c-danger); background: var(--c-danger-soft); }
+.field-error { color: var(--c-danger); font-size: .8rem; font-weight: 500; }
+
+.auth-brand {
+    position: relative; display: flex; align-items: flex-end;
+    padding: clamp(24px, 5vw, 56px);
+    color: #fff; overflow: hidden;
+    background:
+        linear-gradient(180deg, rgba(15, 23, 42, .2), rgba(15, 23, 42, .92)),
+        radial-gradient(circle at 1px 1px, rgba(255, 255, 255, .08) 1px, transparent 0) 0 0 / 22px 22px,
+        linear-gradient(135deg, #1D4ED8 0%, #0F172A 70%);
+}
+.auth-brand::before {
+    /* เส้นสนามจาง ๆ เป็นพื้นหลัง */
+    content: ''; position: absolute; inset: 10% 8% 30%;
+    border: 2px solid rgba(255, 255, 255, .14); border-radius: 8px;
+    background:
+        linear-gradient(90deg, transparent calc(50% - 1px), rgba(255, 255, 255, .14) calc(50% - 1px), rgba(255, 255, 255, .14) calc(50% + 1px), transparent calc(50% + 1px));
+}
+.auth-brand::after {
+    content: ''; position: absolute; left: 50%; top: 40%; width: 120px; height: 120px; transform: translate(-50%, -50%);
+    border: 2px solid rgba(255, 255, 255, .14); border-radius: 50%;
+}
+.auth-brand-inner { position: relative; z-index: 1; max-width: 440px; }
+.auth-brand h2 { color: #fff !important; font-size: clamp(1.6rem, 1rem + 2vw, 2.4rem) !important; margin: 14px 0 18px !important; }
+.auth-brand ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; color: #CBD5E1; }
+.auth-brand li { display: flex; align-items: center; gap: 10px; }
+.auth-brand li .icon { color: #60A5FA; }
+
+@media (max-width: 860px) {
+    .auth-shell { grid-template-columns: minmax(0, 1fr); }
+    .auth-brand { display: none; }
+    .auth-box { padding: 24px 0; }
+}

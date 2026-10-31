@@ -139,8 +139,24 @@
 
     function escapeHtml(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-    // ถ้ามีสนามเดียวที่ว่าง หรือกลับมาจากหน้าอื่น ให้เลือกไว้ให้
+    // โหมดแก้ไข: เติมสนาม ช่วงเวลา และอุปกรณ์เดิมไว้ให้
+    if (cfg.preset) {
+        Object.keys(cfg.preset.equipment || {}).forEach(function (eqId) {
+            var inp = form.querySelector('.equip[data-eq="' + eqId + '"] .qty-input');
+            if (inp) inp.value = cfg.preset.equipment[eqId];
+        });
+        if (cfg.preset.court && document.querySelector('.court-btn[data-court="' + cfg.preset.court + '"]')) {
+            selectCourt(cfg.preset.court);
+            cfg.preset.slots.forEach(function (id) {
+                var inp = form.querySelector('[data-slots-for="' + cfg.preset.court + '"] input[value="' + id + '"]');
+                if (inp && !inp.disabled) inp.checked = true;
+            });
+            refresh();
+        }
+    }
+
+    // ถ้ามีสนามเดียว ให้เลือกไว้ให้เลย
     var firstFree = document.querySelector('.court-btn:not(.is-full)');
-    if (document.querySelectorAll('.court-btn').length === 1 && firstFree) selectCourt(firstFree.dataset.court);
+    if (!courtInput.value && document.querySelectorAll('.court-btn').length === 1 && firstFree) selectCourt(firstFree.dataset.court);
     clampEquipment();
 })();

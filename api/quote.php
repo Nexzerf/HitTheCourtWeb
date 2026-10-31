@@ -14,13 +14,23 @@ $user = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
 $user->execute([$_SESSION['user_id']]);
 $user = $user->fetch();
 
+// ตอนแก้ไขการจอง ไม่นับการจองเดิมของตัวเองว่าเป็นช่วงเวลาที่ถูกจอง
+$ignoreId = null;
+$keepPoints = false;
+if (!empty($_POST['booking_id'])) {
+    $own = $pdo->prepare("SELECT booking_id, points_redeemed FROM bookings WHERE booking_id = ? AND user_id = ?");
+    $own->execute([intval($_POST['booking_id']), $_SESSION['user_id']]);
+    if ($row = $own->fetch()) { $ignoreId = (int) $row['booking_id']; $keepPoints = (int) $row['points_redeemed'] > 0; }
+}
+
 $quote = quoteBooking($pdo, $user, intval($_POST['sport_id'] ?? 0), [
     'court_id'   => $_POST['court_id'] ?? 0,
     'slot_ids'   => $_POST['slot_ids'] ?? [],
     'date'       => $_POST['date'] ?? '',
     'equipment'  => $_POST['equipment'] ?? [],
-    'use_points' => !empty($_POST['use_points']),
-]);
+    'use_points' => !empty($_POST['use_points']) && !$ignoreId,
+    'keep_points' => $keepPoints,
+], $ignoreId);
 
 ob_start();
 if (isset($quote['court_fee'])) include '../includes/booking_summary.php';

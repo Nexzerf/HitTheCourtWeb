@@ -192,7 +192,8 @@ function quoteBooking(PDO $pdo, array $user, int $sportId, array $input, ?int $i
     // แลกแต้ม: ค่าสนามฟรี 1 รอบ
     $points = (int) ($user['points'] ?? 0);
     $canUsePoints = $isMember && $points >= POINTS_FOR_FREE_ROUND && $rounds > 0;
-    $usePoints = $canUsePoints && !empty($input['use_points']);
+    // keep_points: ตอนแก้ไขการจองที่เคยแลกแต้มไว้แล้ว ยังได้ส่วนลดเดิม (ไม่หักแต้มเพิ่ม)
+    $usePoints = ($canUsePoints && !empty($input['use_points'])) || (!empty($input['keep_points']) && $rounds > 0);
     $pointsDiscount = 0.0;
     if ($usePoints) {
         // ฟรี 1 รอบ (คิดจากราคาหลังหักส่วนลดแล้ว)
@@ -333,4 +334,12 @@ function bookingPriceRows(array $booking): array {
         $rows[] = [t('price.discount') . ($booking['discount_note'] ? ' · ' . $booking['discount_note'] : ''), '−' . formatPrice($booking['discount_amount']), 'discount'];
     }
     return $rows;
+}
+
+/** แก้ไขการจองได้ไหม: ยังไม่ยกเลิก, ยังไม่หมดเวลา และยังไม่ถึงวันเล่น (หรือวันนี้แต่ยังไม่เริ่ม) */
+function bookingIsEditable(array $booking): bool {
+    if ($booking['booking_status'] !== 'active' || !in_array($booking['payment_status'], ['paid', 'pending'], true)) return false;
+    if ($booking['payment_status'] === 'pending' && !empty($booking['is_expired'])) return false;
+    $first = $booking['slots'][0]['start_time'] ?? '23:59:59';
+    return $booking['booking_date'] . ' ' . $first > date('Y-m-d H:i:s', time() + 3600); // แก้ได้ก่อนเริ่มเล่นอย่างน้อย 1 ชม.
 }

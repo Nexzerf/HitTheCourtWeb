@@ -1,564 +1,188 @@
 <?php
-// อันดับแรกเลย คือดึงเอาไฟล์ตั้งค่าระบบ (config) เข้ามา
+// pages/membership_payment.php
+// สมัคร / ต่ออายุสมาชิก: ข้อมูลผู้สมัคร (ชื่อ นามสกุล อีเมล เบอร์โทร), รายละเอียดแพ็กเกจและระยะเวลา,
+// วิธีชำระเงิน (QR / โอนเข้าบัญชี), อัปโหลดสลิป และปุ่มยืนยัน
 require_once '../config.php';
-// เช็คเลยว่า "เข้าสู่ระบบแล้วหรือยัง?" ถ้ายังไม่ล็อกอินก็ไม่ให้เข้าหน้านี้
 requireLogin();
-// เรียกใช้ Thunder API Helper
-// ตัวนี้คือไฟล์ช่วยเหลือสำหรับเรียก API ตัวนอก (เจ้า Thunder) มาใช้งาน
 require_once '../api/thunder_api.php';
-// ตัวสร้าง QR พร้อมเพย์ (สร้างเองในเครื่อง ไม่ต้องเรียก API)
 require_once '../api/promptpay.php';
 
- // ดึงเลข ID ของสมาชิกที่ส่งมาทาง URL (GET) แล้วแปลงเป็นตัวเลขให้เรียบร้อย
- $membershipId = intval($_GET['id'] ?? 0);
+$plan = $pdo->query("SELECT * FROM membership_plans WHERE status = 'active' ORDER BY plan_id LIMIT 1")->fetch();
+if (!$plan) redirect('/membership');
 
-// เช็คว่ามี ID ส่งมาไหม ถ้าไม่มี (เท่ากับ 0) ก็ส่งกลับไปหน้าสมาชิกเลย
-if (!$membershipId) {
-    // แก้ไข: ใช้ path สัมพัทธ์
-    redirect('/membership');
-}
+$stmt = $pdo->prepare("SELECT * FROM users WHERE user_id = ?");
+$stmt->execute([$_SESSION['user_id']]);
+$user = $stmt->fetch();
 
-// Fetch Membership
-// ไปดึงข้อมูลการสมัครสมาชิกจากฐานข้อมูล โดยดึงทั้งข้อมูลตาราง user_membership และ membership_plans มา JOIN กัน
-// เพื่อเอาชื่อแพ็กเกจ ราคา มาแสดงผล
- $stmt = $pdo->prepare("
-    SELECT um.*, mp.plan_name, mp.duration_months, mp.price 
-    FROM user_membership um 
-    JOIN membership_plans mp ON um.plan_id = mp.plan_id 
-    WHERE um.id = ? AND um.user_id = ?
-");
- // รันคำสั่ง SQL โดยใส่ ID และ User ID เพื่อกันคนอื่นมาแอบดูของเรา
- $stmt->execute([$membershipId, $_SESSION['user_id']]);
- $membership = $stmt->fetch();
+// ต่ออายุ: เริ่มนับต่อจากวันหมดอายุเดิม / สมัครใหม่: เริ่มวันนี้
+$startDate = isActiveMember($user) ? date('Y-m-d', strtotime($user['member_expire'] . ' +1 day')) : date('Y-m-d');
+$endDate = date('Y-m-d', strtotime($startDate . ' +' . (int) $plan['duration_months'] . ' months -1 day'));
+$amount = (float) $plan['price'];
 
-// ถ้าหาข้อมูลไม่เจอ (อาจจะโดนลบแล้ว หรือไม่ใช่ของเรา) ก็ส่งกลับไปหน้าสมาชิก
-if (!$membership) {
-    // แก้ไข: ใช้ path สัมพัทธ์
-    redirect('/membership');
-}
+$settings = [];
+foreach ($pdo->query("SELECT setting_key, setting_value FROM settings") as $row) $settings[$row['setting_key']] = $row['setting_value'];
+$promptpayNumber = ($settings['promptpay_number'] ?? '') ?: '0951386174';
+$bankName = $settings['bank_name'] ?? '';
+$bankAccount = $settings['bank_account'] ?? '';
+$accountName = $settings['company_name'] ?? '';
+$qrPayload = promptpayPayload($promptpayNumber, $amount);
 
-// Get Settings (สำหรับดึงเบอร์ PromptPay)
-// ดึงการตั้งค่าอื่นๆ ของระบบ โดยเฉพาะเบอร์พร้อมเพย์ที่จะเอาไว้รับเงิน
- $settingsStmt = $pdo->query("SELECT * FROM settings");
- $settings = [];
-while ($row = $settingsStmt->fetch()) { $settings[$row['setting_key']] = $row['setting_value']; }
+$errors = [];
+$old = [
+    'first_name' => $user['first_name'] ?? '', 'last_name' => $user['last_name'] ?? '',
+    'email' => $user['email'] ?? '', 'phone' => $user['phone'] ?? '',
+    'payment_method' => 'promptpay',
+];
 
- // เตรียมตัวแปรไว้เก็บ Error และข้อความสำเร็จ
- $errors = [];
- $successMsg = '';
-
-// --- กำหนดค่าคงที่ตาม Request ---
-// ตรงนี้เขาฟิคยอดเงินไว้ที่ 499 บาท (อาจจะเป็นค่าสมัครพิเศษ) ตามโค้ดเดิม
- $fixedAmount = 499; // ฟิกยอดเงินไว้ตามโค้ดเดิม
- // ข้อมูลบัญชีธนาคารสำรอง (กรณีไม่ใช้พร้อมเพย์)
- $bankName = "KBANK";
- $bankAccount = "1261900617";
- $bankOwner = "HIT THE COURT, LTD";
-
-// --- Generate QR Code (Using logic from pay_booking.php) ---
-// ส่วนนี้คือการสร้าง QR Code สำหรับจ่ายเงิน
- $qrPayload = null;
- $qrError = null;
- // เอาเบอร์พร้อมเพย์จาก Setting ที่ดึงมาเมื่อกี้
- $promptpayNumber = ($settings['promptpay_number'] ?? '') ?: '0951386174'; // เบอร์รับเงินพร้อมเพย์ (ใช้ค่าจาก settings ก่อน)
-
-// ถ้ามีเบอร์พร้อมเพย์ ก็สร้างข้อมูล QR (หน้าเว็บจะวาดเป็นรูปให้)
-if (!empty($promptpayNumber)) {
-    $qrPayload = promptpayPayload($promptpayNumber, $fixedAmount);
-} else {
-    $qrError = "PromptPay number not set.";
-}
-
-// --- Handle Upload & Verification ---
-// ส่วนนี้คือตอนที่ผู้ใช้กดปุ่ม "ยืนยัน" พร้อมอัปโหลดสลิป
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    foreach (['first_name', 'last_name', 'email', 'phone'] as $f) $old[$f] = trim($_POST[$f] ?? '');
+    $old['payment_method'] = ($_POST['payment_method'] ?? '') === 'bank_transfer' ? 'bank_transfer' : 'promptpay';
+
+    if ($old['first_name'] === '' || $old['last_name'] === '') $errors[] = t('err.name_required');
+    if (!filter_var($old['email'], FILTER_VALIDATE_EMAIL)) $errors[] = t('err.email_invalid');
+    if (!preg_match('/^[0-9+\-\s]{9,20}$/', $old['phone'])) $errors[] = t('err.phone_invalid');
+
+    $hasSlip = !empty($_FILES['slip']['name']);
+    if (PAYMENT_MODE !== 'demo' && !$hasSlip) $errors[] = t('pay.err_slip_required');
+
     try {
-        $hasSlip = !empty($_FILES['slip']['name']);
-        // โหมดจริงต้องมีสลิป ส่วนโหมดสาธิตไม่บังคับ
-        if (!$hasSlip && PAYMENT_MODE !== 'demo') throw new Exception("Please upload your payment slip");
-
         $upload = null;
-        if ($hasSlip) {
+        if (!$errors && $hasSlip) {
             $file = $_FILES['slip'];
-            $allowedTypes = ['image/jpeg', 'image/png'];
-        
-            // เช็คชนิดไฟล์ รับแค่ JPG, PNG
-            if (!in_array($file['type'], $allowedTypes)) throw new Exception('Invalid file type. Please upload JPG or PNG');
-            // เช็คขนาดไฟล์ ห้ามเกิน 5MB
-            if ($file['size'] > 5 * 1024 * 1024) throw new Exception('File too large. Maximum 5MB');
-
-            // ตั้งชื่อไฟล์ใหม่ให้สวยงาม มี ID และเวลา
-            $filename = 'mem_' . $membershipId . '_' . time() . '.jpg';
-        
-            // บันทึกไฟล์ (โฟลเดอร์ uploads/ หรือฐานข้อมูล แล้วแต่การตั้งค่า) ถ้าไม่สำเร็จก็โยน Error
-            $upload = saveUploadedFile($file, 'slips', $filename);
-            if (!$upload) throw new Exception('Failed to upload file.');
+            $mime = $file['error'] === UPLOAD_ERR_OK ? mime_content_type($file['tmp_name']) : '';
+            if (!in_array($mime, ['image/jpeg', 'image/png'], true)) throw new Exception(t('pay.err_type'));
+            if ($file['size'] > 4 * 1024 * 1024) throw new Exception(t('pay.err_size'));
+            $upload = saveUploadedFile($file, 'slips', 'mem_' . $user['user_id'] . '_' . time() . ($mime === 'image/png' ? '.png' : '.jpg'));
+            if (!$upload) throw new Exception(t('pay.err_upload'));
+        }
+        if (!$errors && PAYMENT_MODE === 'thunder') {
+            if (!THUNDER_API_KEY) throw new Exception(t('pay.err_verify'));
+            $slipData = (new ThunderClient(THUNDER_API_KEY))->verifyByImage($upload['local']);
+            $paid = floatval($slipData['amount']['amount'] ?? 0);
+            if ($paid < $amount) throw new Exception(t('pay.err_amount', ['need' => formatPrice($amount), 'paid' => formatPrice($paid)]));
         }
 
-        if (PAYMENT_MODE === 'demo') {
-            // โหมดสาธิต: ไม่ได้จ่ายเงินจริง ถือว่าจ่ายครบตามยอด
-            $paidAmount = $fixedAmount;
-        } else {
-            $targetFile = $upload['local'];
+        if (!$errors) {
+            $pdo->beginTransaction();
+            $pdo->prepare("INSERT INTO user_membership (user_id, plan_id, first_name, last_name, email, phone, start_date, end_date, total_price, payment_method, payment_status, slip_image)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', ?)")
+                ->execute([$user['user_id'], $plan['plan_id'], $old['first_name'], $old['last_name'], $old['email'], $old['phone'],
+                    $startDate, $endDate, $amount, $old['payment_method'], $upload['path'] ?? null]);
+            $pdo->prepare("UPDATE users SET is_member = 1, member_expire = ?, first_name = COALESCE(NULLIF(first_name, ''), ?),
+                           last_name = COALESCE(NULLIF(last_name, ''), ?), phone = COALESCE(NULLIF(phone, ''), ?) WHERE user_id = ?")
+                ->execute([$endDate, $old['first_name'], $old['last_name'], $old['phone'], $user['user_id']]);
+            $pdo->commit();
 
-            // --- CALL VERIFY API ---
-            // ตอนนี้ถึงเวลาเอาสลิปไปให้ AI อ่านแล้ว (Verify)
-            $apiKey = defined('THUNDER_API_KEY') ? THUNDER_API_KEY : '';
-            if (empty($apiKey)) throw new Exception("API Key not configured.");
-
-            $client = new ThunderClient($apiKey);
-            // ส่งรูปภาพไปให้ API ตรวจสอบ
-            $slipData = $client->verifyByImage($targetFile);
-        
-            // ดึงยอดเงินที่ API อ่านได้ออกมา
-            $paidAmount = floatval($slipData['amount']['amount'] ?? 0);
-        
-            // Logic: ตรวจสอบยอดเงินกับยอดที่ฟิกไว้ (49)
-            // ถ้ายอดที่โอนน้อยกว่ายอดที่กำหนด ก็ถือว่าผิดพลาด
-            if ($paidAmount < $fixedAmount) {
-                throw new Exception("Amount mismatch. Required: {$fixedAmount}, Transferred: {$paidAmount}");
-            }
+            $_SESSION['is_member'] = 1;
+            $_SESSION['flash_success'] = t('member.success', ['date' => formatDateLocalized($endDate)]);
+            redirect('/membership');
         }
-
-               // --- SUCCESS: Update Database ---
-       // ถ้าผ่านเงื่อนไขมาได้หมด ก็เริ่มอัปเดตฐานข้อมูล (Transaction เพื่อความปลอดภัย)
-        $pdo->beginTransaction();
-        
-        // 1. Update Membership Status
-        // อัปเดตสถานะตาราง user_membership ว่า "verified" และเก็บที่อยู่รูปสลิป
-        $stmt = $pdo->prepare("UPDATE user_membership SET slip_image = ?, payment_status = 'verified' WHERE id = ?");
-        $stmt->execute([$upload['path'] ?? null, $membershipId]);
-
-        // 2. Update User to Premium (is_member = 1)
-        // FIX: ใช้ค่า end_date จากตาราง user_membership โดยตรง จะแม่นยำกว่าคำนวณใหม่
-        // ตรวจสอบให้แน่ใจว่า $membership['end_date'] มีค่า
-        $expireDate = !empty($membership['end_date']) ? $membership['end_date'] : date('Y-m-d', strtotime('+3 months'));
-        
-        // อัปเดตตาราง users ให้เป็นสมาชิก (is_member = 1) และบันทึกวันหมดอายุ
-        $stmt = $pdo->prepare("UPDATE users SET is_member = 1, member_expire = ? WHERE user_id = ?");
-        $stmt->execute([$expireDate, $_SESSION['user_id']]);
-
-        // Update Session
-        // อัปเดตตัวแปร Session ด้วยว่า "คนนี้เป็นสมาชิกแล้วนะ"
-        $_SESSION['is_member'] = 1;
-
-        // ยืนยันการเปลี่ยนแปลงทั้งหมด
-        $pdo->commit();
-
-        // แก้ไข: ใช้ path สัมพัทธ์ และส่ง success=1 เพื่อแจ้งเตือน
-        redirect('/membership?success=1');
-
     } catch (Exception $e) {
-        // ถ้ามี Error ตรงไหน ก็เก็บข้อความ Error ไว้แสดงผล
-        $errors['slip'] = $e->getMessage();
-        
-        // Log failure
-        // และอัปเดตสถานะในฐานข้อมูลว่า "failed"
-        $stmt = $pdo->prepare("UPDATE user_membership SET payment_status = 'failed' WHERE id = ?");
-        $stmt->execute([$membershipId]);
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        $errors[] = $e->getMessage();
     }
 }
+
+$pageTitle = t('member.pay_title');
+$pageStyles = ['payment', 'membership'];
+include '../includes/head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <!-- ตั้งชื่อหน้าเว็บ -->
-    <title>Payment - Membership</title>
-    <!-- โหลด Font สวยๆ -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <!-- โหลดไฟล์ CSS ที่ใช้ตกแต่งเว็บ -->
-    <link rel="stylesheet" href="../style.css">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/home.css">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-    <style>
-        /* Reuse styles from pay_booking.php */
-        /* CSS สำหรับหน้าจ่ายเงินโดยเฉพาะ แบ่งจอเป็น 2 ฝั่ง */
-        .payment-split { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-        @media (max-width: 768px) { .payment-split { grid-template-columns: 1fr; } }
-        /* กล่อง QR Code */
-        .qr-box { background: white; padding: 2rem; border-radius: 1rem; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        .qr-image { width: 256px; height: 256px; margin: 0 auto 1rem; background: #f3f4f6; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
-        /* ส่วนอัปโหลดไฟล์ */
-        .upload-zone { border: 2px dashed #cbd5e1; border-radius: 1rem; padding: 2rem; text-align: center; transition: all 0.2s; cursor: pointer; }
-        .upload-zone:hover { border-color: var(--primary); background: #eff6ff; }
-        .upload-zone.has-file { border-color: var(--success); background: #f0fdf4; }
-        /* กล่องข้อมูลบัญชีธนาคาร */
-        .manual-info { background: #f8fafc; padding: 1.5rem; border-radius: 0.75rem; text-align: left; font-size: 0.9rem; border: 1px solid #e2e8f0; margin-top: 1rem; }
-        .manual-info strong { color: var(--secondary); }
-    </style>
-    <style>
-    .payment-split { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-    
-    .qr-box { 
-        background: white; 
-        padding: 2rem; 
-        border-radius: 1rem; 
-        text-align: center; 
-        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); 
-    }
-    
-    .qr-image { 
-        width: 256px; 
-        height: 256px; 
-        margin: 0 auto 1rem; 
-        background: #f3f4f6; 
-        border-radius: 0.5rem; 
-        display: flex; 
-        align-items: center; 
-        justify-content: center; 
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); 
-        overflow: hidden;
-    }
-    
-    /* ป้องกัน QR image ล้นกล่อง */
-    .qr-image img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        display: block;
-    }
-    
-    .upload-zone { 
-        border: 2px dashed #cbd5e1; 
-        border-radius: 1rem; 
-        padding: 2rem; 
-        text-align: center; 
-        transition: all 0.2s; 
-        cursor: pointer; 
-    }
-    .upload-zone:hover { border-color: var(--primary); background: #eff6ff; }
-    .upload-zone.has-file { border-color: #16a34a; background: #f0fdf4; }
-    
-    .manual-info { 
-        background: #f8fafc; 
-        padding: 1.5rem; 
-        border-radius: 0.75rem; 
-        text-align: left; 
-        font-size: 0.9rem; 
-        border: 1px solid #e2e8f0; 
-        margin-top: 1rem; 
-    }
-    .manual-info strong { color: #0f172a; }
+<main class="page">
+    <div class="wrap">
+        <a href="<?= SITE_URL ?>/membership" class="back-link"><?= icon('arrow-left', 16) ?> <?= e('nav.membership') ?></a>
+        <header class="page-head">
+            <span class="eyebrow"><?= icon('crown', 14) ?> <?= isActiveMember($user) ? e('member.renew') : e('member.join') ?></span>
+            <h1><?= e('member.pay_title') ?></h1>
+            <p><?= PAYMENT_MODE === 'demo' ? e('pay.demo_note') : e('pay.intro') ?></p>
+        </header>
 
-    /* ==================
-       MOBILE
-       ================== */
-    @media (max-width: 768px) {
-        
-        .payment-split { 
-            grid-template-columns: 1fr; 
-        }
+        <?php if ($errors): ?>
+            <div class="alert alert-danger mb-3" role="alert"><?= icon('alert') ?><ul><?php foreach ($errors as $err): ?><li><?= htmlspecialchars($err) ?></li><?php endforeach; ?></ul></div>
+        <?php endif; ?>
 
-        /* QR box */
-        .qr-box {
-            padding: 1.25rem;
-        }
+        <form method="POST" enctype="multipart/form-data" class="split" data-once>
+            <div class="stack">
+                <section class="card">
+                    <div class="card-head"><h2><?= icon('user', 18) ?> <?= e('member.applicant') ?></h2></div>
+                    <div class="card-body form-grid">
+                        <div class="field"><label class="label" for="first_name"><?= e('form.first_name') ?></label>
+                            <input class="input" id="first_name" name="first_name" required maxlength="100" autocomplete="given-name" value="<?= htmlspecialchars($old['first_name']) ?>"></div>
+                        <div class="field"><label class="label" for="last_name"><?= e('form.last_name') ?></label>
+                            <input class="input" id="last_name" name="last_name" required maxlength="100" autocomplete="family-name" value="<?= htmlspecialchars($old['last_name']) ?>"></div>
+                        <div class="field"><label class="label" for="email"><?= e('form.email') ?></label>
+                            <input class="input" id="email" name="email" type="email" required maxlength="100" autocomplete="email" value="<?= htmlspecialchars($old['email']) ?>"></div>
+                        <div class="field"><label class="label" for="phone"><?= e('form.phone') ?></label>
+                            <input class="input" id="phone" name="phone" type="tel" required maxlength="20" pattern="[0-9+\-\s]{9,20}" title="<?= e('err.phone_invalid') ?>" autocomplete="tel" value="<?= htmlspecialchars($old['phone']) ?>"></div>
+                    </div>
+                </section>
 
-        /* QR image — ไม่ fixed ขนาด ให้ขยายตามจอ */
-        .qr-image {
-            width: min(220px, 65vw);
-            height: min(220px, 65vw);
-        }
-
-        /* manual bank info */
-        .manual-info {
-            padding: 1rem;
-            font-size: 0.85rem;
-        }
-
-        /* upload zone */
-        .upload-zone {
-            padding: 1.5rem 1rem;
-        }
-
-        /* container padding */
-        .section .container {
-            padding-left: 1rem;
-            padding-right: 1rem;
-        }
-
-        /* card */
-        .card .card-body {
-            padding: 1.25rem;
-        }
-
-        /* confirm button เต็มความกว้าง */
-        .btn-block {
-            width: 100%;
-            display: flex;
-            justify-content: center;
-        }
-    }
-
-    @media (max-width: 390px) {
-        .qr-image {
-            width: min(180px, 60vw);
-            height: min(180px, 60vw);
-        }
-
-        .qr-box {
-            padding: 1rem;
-        }
-    }
-</style>
-</head>
-<body>
-
-<!-- NAVBAR -->
-<?php include __DIR__ . '/../includes/navbar.php'; ?>
-
-    <main class="section" style="padding-top: 7rem;">
-        <div class="container">
-            <!-- หัวข้อหน้าจ่ายเงิน -->
-            <div class="text-center mb-4">
-                <h1>Membership Payment</h1>
-                <?php if (PAYMENT_MODE === 'demo'): ?>
-                <p class="text-muted">Demo mode: no real payment needed. The QR below is a real PromptPay QR, but you can just press Confirm Payment.</p>
-                <?php else: ?>
-                <p class="text-muted">Scan QR to pay, then upload slip for auto-verification.</p>
-                <?php endif; ?>
-            </div>
-            
-            <!-- ถ้ามี Error จากการตรวจสอบสลิป จะแสดงขึ้นมาตรงนี้ -->
-            <?php if (!empty($errors)): ?>
-            <div class="toast error mb-3" style="display: block;">
-                <strong>Verification Failed:</strong> <?= $errors['slip'] ?? 'An error occurred.' ?>
-            </div>
-            <?php endif; ?>
-            
-            <!-- แบ่งหน้าจอเป็น 2 คอลัมน์ -->
-            <div class="payment-split">
-                <!-- Left: Order Summary -->
-                <!-- ฝั่งซ้าย: แสดงสรุปรายการที่ต้องจ่าย -->
-                <div class="card">
+                <section class="card">
+                    <div class="card-head"><h2><?= icon('card', 18) ?> <?= e('payment.method') ?></h2></div>
                     <div class="card-body">
-                        <h3 class="mb-3" style="font-family: var(--font-display);">Order Summary</h3>
-                        <!-- แสดงเลขที่ออเดอร์ -->
-                        <div class="receipt-row"><span class="receipt-label">Order ID</span><span class="receipt-value">#<?= $membershipId ?></span></div>
-                        <!-- แสดงชื่อแพ็กเกจ -->
-                        <div class="receipt-row"><span class="receipt-label">Plan</span><span class="receipt-value"><?= htmlspecialchars($membership['plan_name']) ?></span></div>
-                        <!-- แสดงระยะเวลา -->
-                        <div class="receipt-row"><span class="receipt-label">Duration</span><span class="receipt-value"><?= $membership['duration_months'] ?> Months</span></div>
-                        
-                        <!-- แสดงยอดรวม (ที่ฟิกไว้ 49 บาท) -->
-                        <div class="order-total" style="margin-top: 1.5rem;">
-                            <span class="order-total-label">Total Amount</span>
-                           
-                            <span class="order-total-value"><?= number_format($fixedAmount) ?> THB</span>
+                        <div class="choices mb-3">
+                            <?php foreach (['promptpay' => ['qr', 'payment.promptpay', 'payment.promptpay_desc'], 'bank_transfer' => ['bank', 'payment.bank', 'payment.bank_desc']] as $val => [$ico, $lbl, $desc]): ?>
+                            <label class="choice">
+                                <input type="radio" name="payment_method" value="<?= $val ?>" <?= $old['payment_method'] === $val ? 'checked' : '' ?>>
+                                <span class="choice-box"><span class="choice-icon"><?= icon($ico) ?></span><span><strong><?= e($lbl) ?></strong><small><?= e($desc) ?></small></span></span>
+                            </label>
+                            <?php endforeach; ?>
                         </div>
+                        <div class="pay-panel" data-method="promptpay" <?= $old['payment_method'] !== 'promptpay' ? 'hidden' : '' ?>>
+                            <div class="qr-card">
+                                <div class="qr-brand"><?= icon('qr', 16) ?> PromptPay</div>
+                                <img id="promptpay-qr" data-payload="<?= htmlspecialchars($qrPayload) ?>" alt="<?= e('pay.qr_alt') ?>" width="240" height="240">
+                                <div class="qr-amount"><?= formatPrice($amount) ?></div>
+                                <div class="muted small"><?= e('pay.promptpay_to', ['number' => $promptpayNumber]) ?><br><?= htmlspecialchars($accountName) ?></div>
+                            </div>
+                        </div>
+                        <div class="pay-panel" data-method="bank_transfer" <?= $old['payment_method'] !== 'bank_transfer' ? 'hidden' : '' ?>>
+                            <dl class="kv bank-box">
+                                <div class="kv-row"><dt><?= e('pay.bank_name') ?></dt><dd><?= htmlspecialchars($bankName) ?></dd></div>
+                                <div class="kv-row"><dt><?= e('pay.account_no') ?></dt><dd><?= htmlspecialchars($bankAccount) ?></dd></div>
+                                <div class="kv-row"><dt><?= e('pay.account_name') ?></dt><dd><?= htmlspecialchars($accountName) ?></dd></div>
+                                <div class="kv-row"><dt><?= e('pay.amount') ?></dt><dd class="text-primary"><?= formatPrice($amount) ?></dd></div>
+                            </dl>
+                        </div>
+
+                        <p class="label mt-3 mb-1"><?= e('pay.upload_title') ?> <?php if (PAYMENT_MODE === 'demo'): ?><span class="opt">(<?= e('common.optional') ?>)</span><?php endif; ?></p>
+                        <label class="upload">
+                            <input type="file" name="slip" accept="image/jpeg,image/png" <?= PAYMENT_MODE !== 'demo' ? 'required' : '' ?>>
+                            <?= icon('upload', 28) ?>
+                            <strong data-upload-label data-empty="<?= e('pay.upload_cta') ?>"><?= e('pay.upload_cta') ?></strong>
+                            <span class="small"><?= e('pay.upload_hint') ?></span>
+                        </label>
+                    </div>
+                </section>
+            </div>
+
+            <aside class="sticky">
+                <div class="card">
+                    <div class="card-head"><h2><?= icon('crown', 18) ?> <?= e('member.order') ?></h2></div>
+                    <div class="card-body">
+                        <dl class="kv">
+                            <div class="kv-row"><dt><?= e('member.plan') ?></dt><dd><?= htmlspecialchars($plan['plan_name']) ?></dd></div>
+                            <div class="kv-row"><dt><?= e('member.duration') ?></dt><dd><?= e('member.months', ['n' => (int) $plan['duration_months']]) ?></dd></div>
+                            <div class="kv-row"><dt><?= e('member.start') ?></dt><dd><?= htmlspecialchars(formatDateLocalized($startDate)) ?></dd></div>
+                            <div class="kv-row"><dt><?= e('member.end') ?></dt><dd><?= htmlspecialchars(formatDateLocalized($endDate)) ?></dd></div>
+                        </dl>
+                        <div class="kv-total"><span><?= e('booking.total') ?></span><span class="amount"><?= formatPrice($amount) ?></span></div>
+                        <button type="submit" class="btn btn-primary btn-lg btn-block mt-2"><?= icon('check', 18) ?> <?= e('member.confirm') ?></button>
                     </div>
                 </div>
-                
-                <!-- Right: Payment Method -->
-                <!-- ฝั่งขวา: ส่วนจ่ายเงินและอัปโหลดสลิป -->
-                <div>
-                    <form method="POST" action="" enctype="multipart/form-data" class="card">
-                        <div class="card-body">
-                            <h3 class="mb-3" style="font-family: var(--font-display);">Payment</h3>
-                            
-                            <!-- QR Code -->
-                            <!-- กล่องแสดง QR Code ให้แสกนจ่ายเงิน -->
-                            <div class="qr-box mb-3">
-                                <?php if ($qrPayload): ?>
-                                    <div class="qr-image">
-                                        <img id="promptpay-qr" data-payload="<?= htmlspecialchars($qrPayload) ?>" alt="PromptPay QR Code">
-                                    </div>
-                                    <div class="text-success mb-2"><strong>Scan to Pay</strong></div>
-                                    <p class="text-muted" style="font-size: 0.9rem;">
-                                        Amount: <strong><?= number_format($fixedAmount) ?> THB</strong><br>
-                                    </p>
-                                <?php else: ?>
-                                    <!-- ถ้าสร้าง QR ไม่ได้จะแจ้งเตือน -->
-                                    <div class="text-danger">Cannot generate QR Code</div>
-                                <?php endif; ?>
-                            </div>
-                            
-                            <!-- Bank Info (เพิ่มเติมจาก pay_booking.php) -->
-                            <!-- แสดงข้อมูลบัญชีธนาคารสำรอง กรณีแสกนไม่ได้ -->
-                            <div class="manual-info">
-                                <p class="mb-2"><strong>Bank Transfer Details:</strong></p>
-                                <p class="mb-1">Bank: <strong><?= $bankName ?></strong></p>
-                                <p class="mb-1">Acc No: <strong><?= $bankAccount ?></strong></p>
-                                <p class="mb-1">Name: <strong><?= $bankOwner ?></strong></p>
-                            </div>
-
-                            <!-- Upload Slip -->
-                            <!-- ส่วนอัปโหลดสลิปโอนเงิน -->
-                            <div class="mb-3" style="margin-top: 1.5rem;">
-                                <label class="form-label"><strong>Upload Payment Slip</strong><?= PAYMENT_MODE === 'demo' ? ' <span class="text-muted">(optional in demo mode)</span>' : '' ?></label>
-                                <!-- พื้นที่กดอัปโหลด (แหงนๆ คือกดแล้วเลือกไฟล์) -->
-                                <div class="upload-zone" onclick="document.getElementById('slip-upload').click()">
-                                    <input type="file" name="slip" id="slip-upload" accept=".jpg,.jpeg,.png" <?= PAYMENT_MODE === 'demo' ? '' : 'required' ?> style="display: none;">
-                                    <div class="upload-icon" style="color: var(--primary);">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                            <polyline points="17 8 12 3 7 8"></polyline>
-                                            <line x1="12" y1="3" x2="12" y2="15"></line>
-                                        </svg>
-                                    </div>
-                                    <p class="mb-0 mt-2" id="file-name" style="font-weight: 500;">Click to upload slip</p>
-                                    <small class="text-muted">JPG, PNG (Max 5MB)</small>
-                                </div>
-                            </div>
-                            
-                            <!-- ปุ่มกดยืนยัน -->
-                            <button type="submit" class="btn btn-primary btn-lg btn-block">
-                                Confirm Payment
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- วาดรูป QR พร้อมเพย์จากข้อมูลที่ PHP สร้างไว้ -->
-    <script src="<?= SITE_URL ?>/assets/js/qrcode.js"></script>
-    <script>
-        (function () {
-            var img = document.getElementById('promptpay-qr');
-            if (!img) return;
-            var qr = qrcode(0, 'M');
-            qr.addData(img.dataset.payload);
-            qr.make();
-            img.src = qr.createDataURL(6, 4);
-        })();
-    </script>
-
-    <script>
-        // Script สำหรับแสดงชื่อไฟล์เมื่อเลือกรูป
-        // ตรงนี้คือตอนเราเลือกรูปแล้ว จะเปลี่ยนข้อความในกล่องให้เป็นชื่อไฟล์นั้นๆ
-        document.getElementById('slip-upload').addEventListener('change', function(e) {
-            var fileName = e.target.files[0].name;
-            document.getElementById('file-name').innerText = fileName;
-            document.querySelector('.upload-zone').classList.add('has-file');
+            </aside>
+        </form>
+    </div>
+</main>
+<script src="<?= SITE_URL ?>/assets/js/qrcode.js"></script>
+<script>
+(function () {
+    var img = document.getElementById('promptpay-qr');
+    if (img) { var qr = qrcode(0, 'M'); qr.addData(img.dataset.payload); qr.make(); img.src = qr.createDataURL(6, 2); }
+    document.querySelectorAll('input[name=payment_method]').forEach(function (r) {
+        r.addEventListener('change', function () {
+            document.querySelectorAll('.pay-panel').forEach(function (p) { p.hidden = p.dataset.method !== r.value; });
         });
-
-        document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.querySelector('.mobile-toggle');
-    const navbar = document.getElementById('navbar');
-    const body = document.body;
-
-    // Toggle Mobile Menu
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function() {
-            navbar.classList.toggle('menu-open');
-            
-            // Toggle Icon (Hamburger to Close)
-            const icon = this.querySelector('svg');
-            if (navbar.classList.contains('menu-open')) {
-                icon.innerHTML = '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>'; // X icon
-                body.style.overflow = 'hidden'; // Prevent scroll
-            } else {
-                icon.innerHTML = '<line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line>'; // Hamburger icon
-                body.style.overflow = ''; // Enable scroll
-            }
-        });
-    }
-
-    // Handle Mobile Dropdowns (Click to open)
-    const navItems = document.querySelectorAll('.nav-item');
-    navItems.forEach(item => {
-        const link = item.querySelector('.nav-link');
-        const dropdown = item.querySelector('.dropdown-menu');
-        
-        if (dropdown && window.innerWidth <= 768) {
-            link.addEventListener('click', function(e) {
-                if (navbar.classList.contains('menu-open')) {
-                     e.preventDefault(); // Prevent link jump
-                     item.classList.toggle('mobile-sub-open');
-                }
-            });
-        }
     });
-
-    // Handle User Menu Click on Mobile
-    const userMenu = document.querySelector('.user-menu');
-    if (userMenu) {
-        const userBtn = userMenu.querySelector('.user-btn');
-        userBtn.addEventListener('click', function(e) {
-            if (window.innerWidth <= 768) {
-                e.stopPropagation();
-                userMenu.classList.toggle('active');
-            }
-        });
-    }
-    
-    document.addEventListener('DOMContentLoaded', function() {
-    const toggleBtn = document.querySelector('.mobile-toggle');
-    const navbar = document.getElementById('navbar');
-    const body = document.body;
-    const userMenu = document.querySelector('.user-menu');
-
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            navbar.classList.toggle('menu-open');
-            body.style.overflow = navbar.classList.contains('menu-open') ? 'hidden' : '';
-        });
-    }
-
-    if (userMenu) {
-        userMenu.querySelector('.user-btn').addEventListener('click', function(e) {
-            e.stopPropagation();
-            userMenu.classList.toggle('active');
-        });
-    }
-
-    document.addEventListener('click', function(e) {
-        if (navbar?.classList.contains('menu-open') && !navbar.contains(e.target)) {
-            navbar.classList.remove('menu-open');
-            body.style.overflow = '';
-        }
-        if (userMenu?.classList.contains('active') && !userMenu.contains(e.target)) {
-            userMenu.classList.remove('active');
-        }
-    });
-});
-});
-    </script>
-    
-</body>
-   <!-- FOOTER (Same as Homepage) -->
-    <!-- ส่วนท้ายเว็บไซต์ (Footer) -->
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-grid">
-                <div>
-                    <span class="footer-logo">HIT THE COURT</span>
-                    <p class="footer-text">
-                        College of Arts, Media and Technology,<br>
-                        Chiang Mai University<br>
-                        © 2026 Hit the Court. All rights reserved.
-                    </p>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Menu</h4>
-                    <ul>
-                        <li><a href="<?= SITE_URL ?>/courts">Court Reservation</a></li>
-                        <li><a href="<?= SITE_URL ?>/index#about">About Us</a></li>
-                        <li><a href="<?= SITE_URL ?>/guidebook">Guidebook</a></li>
-                        <li><a href="<?= SITE_URL ?>/reports">Contact Us</a></li>
-                    </ul>
-                </div>
-                
-                <div class="footer-links">
-                    <h4>Contact Us</h4>
-                    <ul>
-                        <li><a href="tel:111-222-3"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72"></path></svg> 111-222-3</a></li>
-                        <li><a href="mailto:peoplecmucamt@gmail.com"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg> peoplecmucamt@gmail.com</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>HIT THE COURT</p>
-            </div>
-        </div>
-    </footer>
-</body>
-</html>
+})();
+</script>
+<?php include '../includes/footer.php'; ?>

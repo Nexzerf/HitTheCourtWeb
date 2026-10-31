@@ -1,252 +1,125 @@
 <?php
+// pages/reservations.php
+// การจองของฉัน: ข้อมูลลูกค้า + รายละเอียดการจองครบถ้วน พร้อมปุ่มแก้ไข / ชำระเงิน / ขอยกเลิก
 require_once '../config.php';
 requireLogin();
 
-// ดึงเฉพาะ booking ที่จ่ายเงินแล้ว (paid) เท่านั้น
-$stmt = $pdo->prepare("
-    SELECT b.*, s.sport_name, c.court_number, ts.start_time, ts.end_time
-    FROM bookings b
-    JOIN courts c ON b.court_id = c.court_id
-    JOIN sports s ON c.sport_id = s.sport_id
-    JOIN time_slots ts ON b.slot_id = ts.slot_id
-    WHERE b.user_id = ? AND b.payment_status = 'paid'
-    ORDER BY b.booking_date DESC, ts.start_time DESC
-");
+$stmt = $pdo->prepare("SELECT booking_id FROM bookings WHERE user_id = ? ORDER BY booking_date DESC, booking_id DESC");
 $stmt->execute([$_SESSION['user_id']]);
-$bookings = $stmt->fetchAll();
-
-$upcoming = [];
-$past     = [];
-
-foreach ($bookings as $booking) {
-    $bookingDateTime = strtotime($booking['booking_date'] . ' ' . $booking['start_time']);
-    if ($bookingDateTime >= strtotime('today')) {
-        $upcoming[] = $booking;
-    } else {
-        $past[] = $booking;
-    }
+$groups = ['upcoming' => [], 'pending' => [], 'history' => []];
+$today = date('Y-m-d');
+foreach ($stmt->fetchAll(PDO::FETCH_COLUMN) as $id) {
+    $b = loadBookingDetails($pdo, (int) $id);
+    if (!$b) continue;
+    if ($b['booking_status'] === 'active' && $b['payment_status'] === 'paid' && $b['booking_date'] >= $today) $groups['upcoming'][] = $b;
+    elseif ($b['booking_status'] === 'active' && $b['payment_status'] === 'pending' && !$b['is_expired']) $groups['pending'][] = $b;
+    else $groups['history'][] = $b;
 }
+// งานที่ใกล้ถึงก่อนอยู่บนสุด
+usort($groups['upcoming'], fn($a, $b) => strcmp($a['booking_date'] . ($a['slots'][0]['start_time'] ?? ''), $b['booking_date'] . ($b['slots'][0]['start_time'] ?? '')));
+$activeTab = $groups['pending'] && !$groups['upcoming'] ? 'pending' : 'upcoming';
+
+$pageTitle = t('res.title');
+$pageStyles = ['reservations'];
+include '../includes/head.php';
 ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Reservations - Hit The Court</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="../style.css">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/home.css">
-    <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-</head>
-<body>
-
-<!-- NAVBAR -->
-<?php include __DIR__ . '/../includes/navbar.php'; ?>
-
-<!-- MAIN -->
-<main class="section" style="padding-top:7rem;">
-    <div class="container">
-
-        <div class="section-header" style="text-align:left; margin-bottom:2rem;">
-            <h1>My Reservations</h1>
-            <p class="text-muted">Track your bookings and history</p>
-        </div>
-
-        <!-- Tabs -->
-        <div class="reservations-tabs" data-tabs>
-            <button class="reservation-tab active" data-tab="upcoming">Upcoming (<?= count($upcoming) ?>)</button>
-            <button class="reservation-tab"        data-tab="history" >History  (<?= count($past)     ?>)</button>
-        </div>
-
-        <!-- UPCOMING -->
-        <div class="reservations-grid" data-panel="upcoming">
-            <?php if (empty($upcoming)): ?>
-            <div class="card">
-                <div class="card-body text-center p-5">
-                    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" stroke-width="1.5" class="mb-3">
-                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-                        <line x1="16" y1="2" x2="16" y2="6"></line>
-                        <line x1="8"  y1="2" x2="8"  y2="6"></line>
-                        <line x1="3"  y1="10" x2="21" y2="10"></line>
-                    </svg>
-                    <h3 class="mb-2">No Upcoming Bookings</h3>
-                    <p class="text-muted mb-4">Ready to play? Book a court now!</p>
-                    <a href="<?= SITE_URL ?>/courts" class="btn btn-primary">Book a Court</a>
-                </div>
+<main class="page">
+    <div class="wrap">
+        <header class="page-head row-between">
+            <div>
+                <span class="eyebrow"><?= icon('list', 14) ?> <?= e('res.eyebrow') ?></span>
+                <h1><?= e('res.title') ?></h1>
+                <p><?= e('res.intro') ?></p>
             </div>
-            <?php else: ?>
-                <?php foreach ($upcoming as $booking): ?>
-                <div class="reservation-card">
-                    <div class="reservation-card-header">
-                        <div>
-                            <div class="reservation-card-id"><?= htmlspecialchars($booking['booking_code']) ?></div>
-                            <div class="text-muted" style="font-size:0.875rem;">
-                                Booked on <?= date('d M Y', strtotime($booking['created_at'])) ?>
-                            </div>
-                        </div>
-                        <span class="reservation-card-status status-paid">
-                            Confirmed
-                        </span>
+            <a href="<?= SITE_URL ?>/courts" class="btn btn-primary"><?= icon('plus', 18) ?> <?= e('res.new') ?></a>
+        </header>
+
+        <?php if (!empty($_SESSION['flash_success'])): ?>
+            <div class="alert alert-success mb-3" role="status"><?= icon('check-circle') ?><div><?= htmlspecialchars($_SESSION['flash_success']) ?></div></div>
+        <?php unset($_SESSION['flash_success']); endif; ?>
+
+        <div data-tabs>
+            <div class="tabs mb-3" role="tablist">
+                <?php foreach (['upcoming', 'pending', 'history'] as $tab): ?>
+                    <button type="button" class="tab<?= $tab === $activeTab ? ' is-active' : '' ?>" data-tab="<?= $tab ?>" role="tab">
+                        <?= e('res.tab_' . $tab) ?> <span class="badge"><?= count($groups[$tab]) ?></span>
+                    </button>
+                <?php endforeach; ?>
+            </div>
+
+            <?php foreach ($groups as $tab => $list): ?>
+            <div class="tab-panel" data-panel="<?= $tab ?>" <?= $tab !== $activeTab ? 'hidden' : '' ?>>
+                <?php if (!$list): ?>
+                    <div class="card empty">
+                        <?= icon('calendar', 48) ?>
+                        <h3><?= e('res.empty_' . $tab) ?></h3>
+                        <p><?= e('res.empty_hint') ?></p>
+                        <a href="<?= SITE_URL ?>/courts" class="btn btn-primary"><?= e('courts.book_now') ?></a>
                     </div>
-                    <div class="reservation-card-body">
-                        <div class="reservation-details">
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Sport</div>
-                                <div class="reservation-detail-value"><?= htmlspecialchars($booking['sport_name']) ?></div>
+                <?php else: ?>
+                <div class="res-list">
+                    <?php foreach ($list as $b): [$statusText, $statusClass] = bookingStatusBadge($b); ?>
+                    <article class="card res-card">
+                        <div class="res-date">
+                            <span class="res-day"><?= date('j', strtotime($b['booking_date'])) ?></span>
+                            <span class="res-month"><?= htmlspecialchars(formatDateLocalized($b['booking_date'], true)) ?></span>
+                        </div>
+                        <div class="res-main">
+                            <div class="row-between">
+                                <h3 class="mb-0"><?= htmlspecialchars($b['sport_label']) ?> · <?= htmlspecialchars($b['court_label']) ?></h3>
+                                <span class="badge <?= $statusClass ?>"><?= htmlspecialchars($statusText) ?></span>
                             </div>
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Court</div>
-                                <div class="reservation-detail-value">Court <?= $booking['court_number'] ?></div>
+                            <div class="meta mt-1">
+                                <span><?= icon('clock', 15) ?> <?= htmlspecialchars($b['time_label']) ?></span>
+                                <span><?= icon('tag', 15) ?> <?= htmlspecialchars($b['booking_code']) ?></span>
                             </div>
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Date</div>
-                                <div class="reservation-detail-value"><?= date('d M Y', strtotime($booking['booking_date'])) ?></div>
-                            </div>
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Time</div>
-                                <div class="reservation-detail-value">
-                                    <?= date('g:i A', strtotime($booking['start_time'])) ?> –
-                                    <?= date('g:i A', strtotime($booking['end_time']))   ?>
+
+                            <details class="res-details">
+                                <summary><?= e('res.show_details') ?> <?= icon('chevron-down', 14) ?></summary>
+                                <div class="res-cols">
+                                    <dl class="kv">
+                                        <div class="kv-row"><dt><?= e('form.first_name') ?></dt><dd><?= htmlspecialchars($b['first_name'] ?: '-') ?></dd></div>
+                                        <div class="kv-row"><dt><?= e('form.last_name') ?></dt><dd><?= htmlspecialchars($b['last_name'] ?: '-') ?></dd></div>
+                                        <div class="kv-row"><dt><?= e('form.phone') ?></dt><dd><?= htmlspecialchars($b['customer_phone'] ?: '-') ?></dd></div>
+                                        <div class="kv-row"><dt><?= e('success.booked_on') ?></dt><dd><?= htmlspecialchars(formatDateLocalized($b['created_at'])) ?></dd></div>
+                                    </dl>
+                                    <dl class="kv">
+                                        <div class="kv-row"><dt><?= e('success.equipment') ?></dt><dd>
+                                            <?php if (!$b['equipment']): ?>-<?php else: foreach ($b['equipment'] as $eq): ?>
+                                                <div><?= htmlspecialchars(LANG === 'th' && $eq['name_th'] ? $eq['name_th'] : $eq['eq_name']) ?> × <?= (int) $eq['quantity'] ?></div>
+                                            <?php endforeach; endif; ?></dd></div>
+                                        <div class="kv-row"><dt><?= e('payment.method') ?></dt><dd><?= e($b['payment_method'] === 'bank_transfer' ? 'payment.bank' : 'payment.promptpay') ?></dd></div>
+                                        <?php if ((float) $b['discount_amount'] > 0): ?>
+                                            <div class="kv-row discount"><dt><?= e('price.discount') ?></dt><dd>−<?= formatPrice($b['discount_amount']) ?></dd></div>
+                                        <?php endif; ?>
+                                        <div class="kv-row"><dt><?= e($b['payment_status'] === 'paid' ? 'success.paid' : 'booking.total') ?></dt><dd class="text-primary"><?= formatPrice($b['total_price']) ?></dd></div>
+                                    </dl>
                                 </div>
+                                <?php if (!empty($b['notes'])): ?><p class="note mt-1 mb-0"><?= icon('info', 16) ?> <?= htmlspecialchars($b['notes']) ?></p><?php endif; ?>
+                            </details>
+
+                            <div class="res-actions">
+                                <?php if ($tab === 'pending'): ?>
+                                    <a class="btn btn-primary btn-sm" href="<?= SITE_URL ?>/pay_booking?id=<?= $b['booking_id'] ?>"><?= icon('card', 16) ?> <?= e('res.pay_now') ?></a>
+                                <?php endif; ?>
+                                <?php if (bookingIsEditable($b)): ?>
+                                    <a class="btn btn-outline btn-sm" href="<?= SITE_URL ?>/booking?edit=<?= $b['booking_id'] ?>"><?= icon('edit', 16) ?> <?= e('res.edit') ?></a>
+                                <?php endif; ?>
+                                <?php if ($tab === 'upcoming'): ?>
+                                    <a class="btn btn-ghost btn-sm" href="<?= SITE_URL ?>/payment_success?booking=<?= urlencode($b['booking_code']) ?>"><?= icon('receipt', 16) ?> <?= e('res.receipt') ?></a>
+                                    <a class="btn btn-danger-outline btn-sm" href="<?= SITE_URL ?>/reports?category=cancel&booking=<?= urlencode($b['booking_code']) ?>"><?= icon('x-circle', 16) ?> <?= e('res.cancel') ?></a>
+                                <?php elseif ($tab === 'history' && $b['payment_status'] !== 'paid'): ?>
+                                    <a class="btn btn-outline btn-sm" href="<?= SITE_URL ?>/booking?sport_id=<?= (int) $b['sport_id'] ?>"><?= icon('refresh', 16) ?> <?= e('res.book_again') ?></a>
+                                <?php endif; ?>
                             </div>
                         </div>
-                    </div>
-                    <div class="reservation-card-footer">
-                        <span style="font-family:var(--font-display); font-weight:600; font-size:1.125rem;">
-                            <?= number_format($booking['total_price']) ?> THB
-                        </span>
-                        <span style="color:var(--success,#28a745); font-weight:600; font-size:0.85rem;">
-                            ✅ Payment Confirmed
-                        </span>
-                    </div>
+                    </article>
+                    <?php endforeach; ?>
                 </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
-        </div>
-
-        <!-- HISTORY -->
-        <div class="reservations-grid" data-panel="history" style="display:none;">
-            <?php if (empty($past)): ?>
-            <div class="card">
-                <div class="card-body text-center p-5">
-                    <p class="text-muted">No past bookings found.</p>
-                </div>
+                <?php endif; ?>
             </div>
-            <?php else: ?>
-                <?php foreach ($past as $booking): ?>
-                <div class="reservation-card">
-                    <div class="reservation-card-header">
-                        <div>
-                            <div class="reservation-card-id"><?= htmlspecialchars($booking['booking_code']) ?></div>
-                            <div class="text-muted" style="font-size:0.875rem;">
-                                <?= date('d M Y', strtotime($booking['booking_date'])) ?>
-                            </div>
-                        </div>
-                        <span class="reservation-card-status status-completed">
-                            Completed
-                        </span>
-                    </div>
-                    <div class="reservation-card-body">
-                        <div class="reservation-details">
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Sport</div>
-                                <div class="reservation-detail-value"><?= htmlspecialchars($booking['sport_name']) ?></div>
-                            </div>
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Court</div>
-                                <div class="reservation-detail-value">Court <?= $booking['court_number'] ?></div>
-                            </div>
-                            <div class="reservation-detail">
-                                <div class="reservation-detail-label">Total</div>
-                                <div class="reservation-detail-value"><?= number_format($booking['total_price']) ?> THB</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <?php endforeach; ?>
-            <?php endif; ?>
+            <?php endforeach; ?>
         </div>
-
     </div>
 </main>
-
-<!-- FOOTER -->
-<footer class="footer">
-    <div class="container">
-        <div class="footer-grid">
-            <div>
-                <span class="footer-logo">HIT THE COURT</span>
-                <p class="footer-text">
-                    College of Arts, Media and Technology,<br>
-                    Chiang Mai University<br>
-                    © 2026 Hit the Court. All rights reserved.
-                </p>
-            </div>
-            <div class="footer-links">
-                <h4>Menu</h4>
-                <ul>
-                    <li><a href="<?= SITE_URL ?>/courts">Court Reservation</a></li>
-                    <li><a href="<?= SITE_URL ?>/index#about">About Us</a></li>
-                    <li><a href="<?= SITE_URL ?>/guidebook">Guidebook</a></li>
-                    <li><a href="<?= SITE_URL ?>/reports">Contact Us</a></li>
-                </ul>
-            </div>
-            <div class="footer-links">
-                <h4>Contact Us</h4>
-                <ul>
-                    <li><a href="tel:111-222-3">111-222-3</a></li>
-                    <li><a href="mailto:peoplecmucamt@gmail.com">peoplecmucamt@gmail.com</a></li>
-                </ul>
-            </div>
-        </div>
-        <div class="footer-bottom"><p>HIT THE COURT</p></div>
-    </div>
-</footer>
-
-<!-- JAVASCRIPT -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-
-    // Navbar
-    const toggleBtn = document.querySelector('.mobile-toggle');
-    const navbar    = document.getElementById('navbar');
-    const userMenu  = document.querySelector('.user-menu');
-    const body      = document.body;
-
-    if (toggleBtn && navbar) {
-        toggleBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            navbar.classList.toggle('menu-open');
-            body.style.overflow = navbar.classList.contains('menu-open') ? 'hidden' : '';
-        });
-    }
-    if (userMenu) {
-        userMenu.querySelector('.user-btn').addEventListener('click', function (e) {
-            if (window.innerWidth <= 768) { e.stopPropagation(); userMenu.classList.toggle('active'); }
-        });
-    }
-    document.addEventListener('click', function (e) {
-        if (navbar?.classList.contains('menu-open') && !navbar.contains(e.target)) {
-            navbar.classList.remove('menu-open'); body.style.overflow = '';
-        }
-        if (userMenu?.classList.contains('active') && !userMenu.contains(e.target)) {
-            userMenu.classList.remove('active');
-        }
-    });
-
-    // Tab Switching
-    document.querySelectorAll('.reservation-tab').forEach(tab => {
-        tab.addEventListener('click', function () {
-            document.querySelectorAll('.reservation-tab').forEach(t => t.classList.remove('active'));
-            this.classList.add('active');
-            document.querySelectorAll('[data-panel]').forEach(p => p.style.display = 'none');
-            document.querySelector(`[data-panel="${this.dataset.tab}"]`).style.display = 'grid';
-        });
-    });
-
-});
-</script>
-</body>
-</html>
+<?php include '../includes/footer.php'; ?>

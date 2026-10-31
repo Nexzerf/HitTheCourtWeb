@@ -273,8 +273,17 @@ function isAdmin() {
  */
 function requireLogin() {
     if (!isLoggedIn()) {
-        redirect('/pages/login.php');
+        // จำหน้าที่ตั้งใจจะเข้า ล็อกอินเสร็จแล้วจะพากลับมาที่เดิม
+        redirect('/login?next=' . urlencode($_SERVER['REQUEST_URI'] ?? '/'));
     }
+}
+
+/** URL ปลายทางหลังล็อกอิน (รับเฉพาะ path ภายในเว็บ กันการพาไปเว็บอื่น) */
+function safeNextUrl(?string $next): string {
+    // ต้องขึ้นต้นด้วย / ตัวเดียว (ไม่ใช่ // หรือ /\ ซึ่งเบราว์เซอร์ตีความเป็นเว็บอื่น) และห้ามมีขึ้นบรรทัดใหม่
+    $next = (string) $next;
+    if (strlen($next) > 1 && $next[0] === '/' && $next[1] !== '/' && $next[1] !== '\\' && !preg_match('/[\r\n]/', $next)) return $next;
+    return '/';
 }
 
 /**
