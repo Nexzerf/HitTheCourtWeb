@@ -180,6 +180,7 @@ class DatabaseSessionHandler implements SessionHandlerInterface
 ini_set('session.cookie_httponly', 1); // ป้องกันไม่ให้ JavaScript มาขโมย Session ID ได้
 ini_set('session.use_only_cookies', 1); // บังคับให้ใช้ Cookie เท่านั้นในการเก็บ Session
 ini_set('session.cookie_secure', $isHttps ? 1 : 0); // ถ้าเว็บมี HTTPS ให้ส่ง Cookie ผ่าน HTTPS เท่านั้น
+ini_set('session.cookie_samesite', 'Lax'); // ไม่ส่ง Cookie ไปกับฟอร์มที่ยิงมาจากเว็บอื่น (กัน CSRF ชั้นแรก)
 
 // Start the session
 // สั่งให้ Session เริ่มทำงาน ถ้ายังไม่ได้เริ่มก็ให้เริ่มเลย (ใช้คำสั่ง session_start)
@@ -293,6 +294,24 @@ function safeNextUrl(?string $next): string {
 function requireAdmin() {
     if (!isAdmin()) {
         redirect('/admin/login.php');
+    }
+}
+
+/**
+ * CSRF token สำหรับฟอร์มที่เปลี่ยนแปลงข้อมูล (ใช้ในหน้าแอดมิน)
+ * ในฟอร์มใส่ <?= csrfField() ?> และตอนรับ POST เรียก verifyCsrf()
+ */
+function csrfToken(): string {
+    if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(16));
+    return $_SESSION['csrf'];
+}
+function csrfField(): string {
+    return '<input type="hidden" name="csrf" value="' . csrfToken() . '">';
+}
+function verifyCsrf(): void {
+    if (!hash_equals(csrfToken(), (string) ($_POST['csrf'] ?? ''))) {
+        http_response_code(400);
+        exit(t('err.csrf'));
     }
 }
 

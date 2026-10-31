@@ -1,7 +1,7 @@
 <?php
 // includes/navbar.php
 // แถบเมนูด้านบน (Navbar) ที่ใช้ร่วมกันทุกหน้า แก้ที่ไฟล์นี้ที่เดียว ทุกหน้าจะเปลี่ยนตาม
-// หน้าตาอยู่ใน assets/css/navbar.css และการทำงาน (เปิด/ปิดเมนูมือถือ) อยู่ใน assets/js/navbar.js
+// หน้าตาอยู่ใน assets/css/navbar.css (โหลดใน includes/head.php) และการทำงาน (เปิด/ปิดเมนูมือถือ) อยู่ใน assets/js/navbar.js
 
 // หาว่าตอนนี้อยู่หน้าไหน เพื่อทำไฮไลต์เมนูที่กำลังเปิดอยู่
 $currentPage = basename(parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) ?: 'index', '.php');
@@ -15,11 +15,6 @@ $navLinks = [
 $activeAlias = ['booking' => 'courts', 'pay_booking' => 'reservations', 'payment_success' => 'reservations'];
 $activeNav = $activeAlias[$currentPage] ?? $currentPage;
 ?>
-<?php if (!defined('APP_HEAD')): // หน้าเก่าที่ยังไม่ได้ใช้ includes/head.php ?>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/navbar.css">
-<link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/responsive.css">
-<?php endif; ?>
 
 <nav class="site-nav" id="navbar" aria-label="Main">
     <div class="sn-container">

@@ -1,287 +1,64 @@
 <?php
-// อันดับแรกเลย ดึงเอาไฟล์ตั้งค่าหลัก (config) เข้ามา เพื่อเชื่อมฐานข้อมูลและใช้ฟังก์ชันต่างๆ
+// admin/dashboard.php
+// ภาพรวม: ตัวเลขสำคัญ, ตารางการใช้สนามวันนี้ และการจองล่าสุด
 require_once '../config.php';
-// ตรวจสอบสิทธิ์ทันทีว่า "เป็นแอดมินไหม?" ถ้าไม่ใช่จะไม่ให้เข้าหน้านี้
 requireAdmin();
 
-// --- Sidebar Data ---
-// เตรียมข้อมูลสำหรับแถบด้านข้าง (Sidebar) โดยเฉพาะตัวเลขแจ้งเตือน (Badge)
-// นับจำนวนรายงานที่ยังไม่ได้ดำเนินการ (สถานะ new หรือ in_progress)
- $pendingReports = $pdo->query("SELECT COUNT(*) as count FROM reports WHERE status IN ('new', 'in_progress')")->fetch()['count'];
+$today = date('Y-m-d');
+$monthStart = date('Y-m-01');
+$kpi = [
+    'today' => (int) $pdo->query("SELECT COUNT(*) FROM bookings WHERE booking_date = '$today' AND payment_status = 'paid' AND booking_status = 'active'")->fetchColumn(),
+    'revenue' => (float) $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM bookings WHERE payment_status = 'paid' AND booking_status <> 'cancelled' AND booking_date >= '$monthStart'")->fetchColumn(),
+    'members' => (int) $pdo->query("SELECT COUNT(*) FROM users WHERE is_member = 1 AND member_expire >= '$today'")->fetchColumn(),
+    'reports' => (int) $pdo->query("SELECT COUNT(*) FROM reports WHERE status = 'new'")->fetchColumn(),
+    'pending' => (int) $pdo->query("SELECT COUNT(*) FROM bookings b WHERE b.payment_status = 'pending' AND " . activeBookingSql('b'))->fetchColumn(),
+];
 
-// --- Summary Stats ---
-// ส่วนนี้คือการ "เก็บตัวเลขสถิติ" มาไว้แสดงผลบนหน้า Dashboard
-// 1. นับจำนวนการจองทั้งหมดในระบบ
- $totalBookings = $pdo->query("SELECT COUNT(*) FROM bookings")->fetchColumn();
-// 2. คำนวณรายได้รวม (ยอดเงินที่จ่ายแล้ว status 'paid') ใช้ COALESCE เพื่อกันกรณีไม่มีข้อมูลจะได้ไม่เป็น null
- $totalRevenue = $pdo->query("SELECT COALESCE(SUM(total_price), 0) FROM bookings WHERE payment_status = 'paid'")->fetchColumn();
-// 3. นับจำนวนสมาชิกที่ยังมีสถานะ Active อยู่
- $activeMembers = $pdo->query("SELECT COUNT(*) FROM users WHERE is_member = 1")->fetchColumn();
+$todayIds = $pdo->query("SELECT b.booking_id FROM bookings b JOIN time_slots ts ON ts.slot_id = b.slot_id
+                         WHERE b.booking_date = '$today' AND b.payment_status = 'paid' AND b.booking_status = 'active' ORDER BY ts.start_time")->fetchAll(PDO::FETCH_COLUMN);
+$todayBookings = array_filter(array_map(fn($id) => loadBookingDetails($pdo, (int) $id), $todayIds));
+$recentIds = $pdo->query("SELECT booking_id FROM bookings ORDER BY created_at DESC, booking_id DESC LIMIT 8")->fetchAll(PDO::FETCH_COLUMN);
+$recent = array_filter(array_map(fn($id) => loadBookingDetails($pdo, (int) $id), $recentIds));
 
-// --- Recent Bookings ---
-// ดึงข้อมูลการจองล่าสุด 5 รายการ มาแสดงในตาราง
-// ต้อง JOIN หลายตารางเพื่อดึงชื่อผู้ใช้, ชื่อกีฬา มาแสดงให้ครบ
- $stmt = $pdo->query("
-    SELECT b.booking_code, b.total_price, b.payment_status, b.created_at, u.username, s.sport_name 
-    FROM bookings b 
-    JOIN users u ON b.user_id = u.user_id 
-    JOIN courts c ON b.court_id = c.court_id 
-    JOIN sports s ON c.sport_id = s.sport_id 
-    ORDER BY b.created_at DESC 
-    LIMIT 5
-");
- $recentBookings = $stmt->fetchAll();
-
-// --- Sport Popularity ---
-// ดึงข้อมูลความนิยมของกีฬา ว่ากีฬาไหนถูกจองเยอะที่สุด 5 อันดับแรก
- $sportPop = $pdo->query("
-    SELECT s.sport_name, COUNT(b.booking_id) as count 
-    FROM bookings b 
-    JOIN courts c ON b.court_id = c.court_id 
-    JOIN sports s ON c.sport_id = s.sport_id 
-    GROUP BY s.sport_name 
-    ORDER BY count DESC 
-    LIMIT 5
-")->fetchAll();
+$adminPage = 'dashboard';
+$pageTitle = t('admin.nav_dashboard');
+include '../includes/admin_layout_top.php';
 ?>
+<div class="kpis">
+    <div class="card kpi"><div class="kpi-label"><?= icon('calendar', 16) ?> <?= e('admin.kpi_today') ?></div><div class="kpi-value"><?= $kpi['today'] ?></div><div class="kpi-sub"><?= htmlspecialchars(formatDateLocalized($today, true)) ?></div></div>
+    <div class="card kpi"><div class="kpi-label"><?= icon('tag', 16) ?> <?= e('admin.kpi_revenue') ?></div><div class="kpi-value"><?= formatPrice($kpi['revenue']) ?></div><div class="kpi-sub"><?= e('admin.this_month') ?></div></div>
+    <div class="card kpi"><div class="kpi-label"><?= icon('crown', 16) ?> <?= e('admin.kpi_members') ?></div><div class="kpi-value"><?= $kpi['members'] ?></div></div>
+    <a class="card kpi" href="<?= SITE_URL ?>/admin/reports.php?status=new" style="text-decoration:none"><div class="kpi-label"><?= icon('message', 16) ?> <?= e('admin.kpi_reports') ?></div><div class="kpi-value"><?= $kpi['reports'] ?></div></a>
+    <a class="card kpi" href="<?= SITE_URL ?>/admin/bookings.php?status=pending" style="text-decoration:none"><div class="kpi-label"><?= icon('clock', 16) ?> <?= e('status.awaiting_payment') ?></div><div class="kpi-value"><?= $kpi['pending'] ?></div></a>
+</div>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Admin</title>
-    <!-- โหลดฟอนต์สวยๆ และไฟล์ CSS สำหรับหน้า Admin -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= SITE_URL ?>/assets/css/admin.css">
-        <link rel="icon" type="image/png" sizes="32x32" href="/images/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/images/favicon-48x48.png">
-</head>
-<body>
-    <!-- Mobile Sidebar Toggle -->
-<button class="admin-sidebar-toggle" id="sidebarToggle" aria-label="Toggle sidebar">
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" 
-         fill="none" stroke="currentColor" stroke-width="2">
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="6" x2="21" y2="6"></line>
-        <line x1="3" y1="18" x2="21" y2="18"></line>
-    </svg>
-</button>
-<div class="admin-sidebar-overlay" id="sidebarOverlay"></div>
-    <div class="admin-layout">
-        
-             <!-- Sidebar (Consistent with other pages) -->
-        <!-- ส่วนของเมนูด้านข้าง (Sidebar) ที่ใช้งานร่วมกันทุกหน้า -->
-        <aside class="admin-sidebar">
-            <div class="admin-brand">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="3" y1="9" x2="21" y2="9"></line>
-                    <line x1="9" y1="21" x2="9" y2="9"></line>
-                </svg>
-                Hit The Court
-            </div>
-            
-            <nav class="admin-nav">
-                <!-- เมนู Dashboard (หน้าปัจจุบัน ใส่ class active ไว้) -->
-                <a href="dashboard.php" class="admin-nav-item active">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                    Dashboard
-                </a>
-                <!-- เมนู Analytics -->
-                <a href="analytics.php" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg>
-                    Analytics
-                </a>
-                <!-- เมนู Sports & Courts -->
-                <a href="sports.php" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle></svg>
-                    Sports & Courts
-                </a>
-                <!-- เมนู Bookings -->
-                <a href="bookings.php" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                    Bookings
-                </a>
-                <!-- เมนู Payments -->
-                <a href="payments.php" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                    Payments
-                </a>
-                <!-- เมนู Members -->
-                <a href="members.php" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    Members
-                </a>
-                <!-- เมนู Reports -->
-                <a href="reports.php" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-                    Reports
-                    <!-- ตรงนี้คือมีเงื่อนไขว่า ถ้ามีรายงานที่รอดำเนินการ จะโชว์ป้ายแดงๆ ขึ้นมา -->
-                    <?php if ($pendingReports > 0): ?>
-                    <span style="background: #DC2626; color: white; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; margin-left: auto;"><?= $pendingReports ?></span>
-                    <?php endif; ?>
-                </a>
-            </nav>
-            
-            <!-- ปุ่ม Logout อยู่ด้านล่างสุดของ Sidebar -->
-            <div style="margin-top: auto; padding: 1rem; border-top: 1px solid rgba(255,255,255,0.1);">
-                <a href="<?= SITE_URL ?>/api/auth.php?action=admin_logout" class="admin-nav-item">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
-                    Logout
-                </a>
-            </div>
-        </aside>
-        
-        
-        <!-- Main Content -->
-        <!-- ส่วนเนื้อหาหลักทางด้านขวา -->
-        <main class="admin-main">
-            
-            <div class="admin-header">
-                <h1 class="admin-title">Dashboard</h1>
-                <p style="color: var(--admin-muted);">Welcome back, Admin</p>
-            </div>
+<div class="grid grid-2">
+    <section class="card">
+        <div class="card-head"><h2><?= icon('clock', 18) ?> <?= e('admin.today_schedule') ?></h2><a class="btn btn-ghost btn-sm" href="<?= SITE_URL ?>/admin/bookings.php?date=<?= $today ?>"><?= e('admin.view_all') ?></a></div>
+        <?php if (!$todayBookings): ?><div class="empty"><?= icon('calendar', 40) ?><p class="mb-0"><?= e('admin.no_today') ?></p></div>
+        <?php else: ?>
+        <div class="table-wrap"><table class="table">
+            <thead><tr><th><?= e('success.time') ?></th><th><?= e('success.sport') ?></th><th><?= e('success.customer') ?></th></tr></thead>
+            <tbody><?php foreach ($todayBookings as $b): ?>
+                <tr><td class="strong"><?= htmlspecialchars($b['time_label']) ?></td><td><?= htmlspecialchars($b['sport_label']) ?> · <?= htmlspecialchars($b['court_label']) ?></td>
+                    <td><?= htmlspecialchars($b['customer_name']) ?><div class="adm-sub"><?= htmlspecialchars($b['customer_phone'] ?: '') ?></div></td></tr>
+            <?php endforeach; ?></tbody>
+        </table></div>
+        <?php endif; ?>
+    </section>
 
-            <!-- Summary Cards: ใช้ Class dashboard-grid และ stat-card -->
-            <!-- ส่วนนี้คือแถวของ "การ์ดสรุป" ที่แสดงตัวเลขสำคัญๆ ที่ดึงมาจาก PHP ด้านบน -->
-            <div class="dashboard-grid" style="margin-bottom: 1.5rem;">
-                <!-- การ์ดแสดงรายได้รวม -->
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background: #DCFCE7; color: #166534;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                    </div>
-                    <div class="stat-card-content">
-                        <span class="stat-card-label">Total Revenue</span>
-                        <!-- แสดงตัวแปร $totalRevenue ที่คำนวณไว้ -->
-                        <h3 class="stat-card-value">฿<?= number_format($totalRevenue) ?></h3>
-                    </div>
-                </div>
-                
-                <!-- การ์ดแสดงจำนวนการจองรวม -->
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background: #DBEAFE; color: #1E40AF;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                    </div>
-                    <div class="stat-card-content">
-                        <span class="stat-card-label">Total Bookings</span>
-                        <!-- แสดงตัวแปร $totalBookings -->
-                        <h3 class="stat-card-value"><?= $totalBookings ?></h3>
-                    </div>
-                </div>
-                
-                <!-- การ์ดแสดงจำนวนสมาชิกที่ใช้งานอยู่ -->
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background: #FEE2E2; color: #991B1B;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle></svg>
-                    </div>
-                    <div class="stat-card-content">
-                        <span class="stat-card-label">Active Members</span>
-                        <!-- แสดงตัวแปร $activeMembers -->
-                        <h3 class="stat-card-value"><?= $activeMembers ?></h3>
-                    </div>
-                </div>
-                
-                <!-- การ์ดแสดงรายงานที่รอดำเนินการ -->
-                <div class="stat-card">
-                    <div class="stat-card-icon" style="background: #FEF3C7; color: #92400E;">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                    </div>
-                    <div class="stat-card-content">
-                        <span class="stat-card-label">Pending Reports</span>
-                        <!-- แสดงตัวแปร $pendingReports -->
-                        <h3 class="stat-card-value"><?= $pendingReports ?></h3>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Content Grid -->
-            <!-- ส่วนนี้จะแบ่ง Grid เป็น 2 คอลัมน์ (ซ้ายกว้าง 2 ส่วน, ขวาแคบ 1 ส่วน) -->
-            <div class="dashboard-grid" style="grid-template-columns: 2fr 1fr;">
-                
-                <!-- Recent Bookings Table -->
-                <!-- ส่วนซ้าย: ตารางแสดงรายการจองล่าสุด -->
-                <div class="admin-card">
-                    <div class="admin-card-header">
-                        <h3>Recent Bookings</h3>
-                    </div>
-                    <div class="admin-card-body" style="padding: 0;">
-                        <table class="admin-table">
-                            <thead>
-                                <tr>
-                                    <th>ID</th>
-                                    <th>User</th>
-                                    <th>Sport</th>
-                                    <th>Amount</th>
-                                    <th>Status</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <!-- วนลูปแสดงข้อมูลการจองล่าสุดที่ดึงมา -->
-                                <?php if (empty($recentBookings)): ?>
-                                <tr>
-                                    <!-- ถ้าไม่มีข้อมูลเลย ให้แสดงข้อความว่างๆ -->
-                                    <td colspan="5" style="text-align: center; padding: 2rem;">No recent bookings.</td>
-                                </tr>
-                                <?php else: ?>
-                                    <?php foreach ($recentBookings as $b): ?>
-                                    <tr>
-                                        <td><strong><?= htmlspecialchars($b['booking_code']) ?></strong></td>
-                                        <td><?= htmlspecialchars($b['username']) ?></td>
-                                        <td><?= htmlspecialchars($b['sport_name']) ?></td>
-                                        <td>฿<?= number_format($b['total_price']) ?></td>
-                                        <td>
-                                            <!-- กำหนดสีของ Badge ตามสถานะการจ่ายเงิน -->
-                                            <?php 
-                                            $statusClass = $b['payment_status'] == 'paid' ? 'badge-success' : 'badge-warning';
-                                            ?>
-                                            <span class="badge <?= $statusClass ?>"><?= ucfirst($b['payment_status']) ?></span>
-                                        </td>
-                                    </tr>
-                                    <?php endforeach; ?>
-                                <?php endif; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-                
-                <!-- Sport Popularity -->
-                <!-- ส่วนขวา: แสดงอันดับกีฬายอดนิยม -->
-                <div class="admin-card">
-                    <div class="admin-card-header">
-                        <h3>Popular Sports</h3>
-                    </div>
-                    <div class="admin-card-body">
-                        <!-- วนลูปแสดงรายชื่อกีฬาและจำนวนการจอง -->
-                        <?php foreach ($sportPop as $s): ?>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--admin-border);">
-                            <span style="font-weight: 500;"><?= htmlspecialchars($s['sport_name']) ?></span>
-                            <!-- แสดงจำนวนการจองของกีฬานั้นๆ -->
-                            <span class="badge badge-default"><?= $s['count'] ?> bookings</span>
-                        </div>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-                
-            </div>
-
-        </main>
-    </div>
-    <script>
-const toggle   = document.getElementById('sidebarToggle');
-const sidebar  = document.querySelector('.admin-sidebar');
-const overlay  = document.getElementById('sidebarOverlay');
-
-toggle?.addEventListener('click', () => {
-    sidebar.classList.toggle('active');
-    overlay.classList.toggle('active');
-});
-
-overlay?.addEventListener('click', () => {
-    sidebar.classList.remove('active');
-    overlay.classList.remove('active');
-});
-</script>
-</body>
-</html>
+    <section class="card">
+        <div class="card-head"><h2><?= icon('list', 18) ?> <?= e('admin.recent_bookings') ?></h2><a class="btn btn-ghost btn-sm" href="<?= SITE_URL ?>/admin/bookings.php"><?= e('admin.view_all') ?></a></div>
+        <div class="table-wrap"><table class="table">
+            <thead><tr><th><?= e('pay.booking_id') ?></th><th><?= e('success.customer') ?></th><th><?= e('booking.total') ?></th><th><?= e('admin.status') ?></th></tr></thead>
+            <tbody><?php foreach ($recent as $b): [$st, $cls] = bookingStatusBadge($b); ?>
+                <tr><td><a href="<?= SITE_URL ?>/admin/bookings.php?q=<?= urlencode($b['booking_code']) ?>" class="strong"><?= htmlspecialchars($b['booking_code']) ?></a>
+                        <div class="adm-sub"><?= htmlspecialchars($b['sport_label']) ?> · <?= htmlspecialchars(formatDateLocalized($b['booking_date'])) ?></div></td>
+                    <td><?= htmlspecialchars($b['customer_name']) ?></td>
+                    <td><?= formatPrice($b['total_price']) ?></td>
+                    <td><span class="badge <?= $cls ?>"><?= htmlspecialchars($st) ?></span></td></tr>
+            <?php endforeach; ?></tbody>
+        </table></div>
+    </section>
+</div>
+<?php include '../includes/admin_layout_bottom.php'; ?>
