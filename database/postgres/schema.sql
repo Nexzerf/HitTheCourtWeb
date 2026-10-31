@@ -261,3 +261,32 @@ REVOKE ALL ON SCHEMA hitthecourt FROM anon, authenticated;
 REVOKE ALL ON ALL TABLES IN SCHEMA hitthecourt FROM anon, authenticated;
 REVOKE ALL ON ALL SEQUENCES IN SCHEMA hitthecourt FROM anon, authenticated;
 REVOKE EXECUTE ON FUNCTION hitthecourt.set_updated_at() FROM PUBLIC, anon, authenticated;
+
+-- ---------- บัญชีฐานข้อมูลสำหรับเว็บ ----------
+-- เว็บใช้ role "hitthecourt_app" ที่เข้าถึงได้เฉพาะ schema นี้ (ไม่ต้องใช้รหัส postgres ของทั้งโปรเจกต์)
+-- ตั้งรหัสผ่านแยกต่างหาก (ไม่เก็บในไฟล์นี้):
+--   ALTER ROLE hitthecourt_app WITH LOGIN PASSWORD '...';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'hitthecourt_app') THEN
+        CREATE ROLE hitthecourt_app NOLOGIN;
+    END IF;
+END $$;
+ALTER ROLE hitthecourt_app SET search_path TO hitthecourt, public;
+ALTER ROLE hitthecourt_app SET timezone TO 'Asia/Bangkok';
+GRANT USAGE ON SCHEMA hitthecourt TO hitthecourt_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA hitthecourt TO hitthecourt_app;
+GRANT USAGE, SELECT, UPDATE ON ALL SEQUENCES IN SCHEMA hitthecourt TO hitthecourt_app;
+GRANT EXECUTE ON FUNCTION hitthecourt.set_updated_at() TO hitthecourt_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA hitthecourt GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO hitthecourt_app;
+ALTER DEFAULT PRIVILEGES IN SCHEMA hitthecourt GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO hitthecourt_app;
+
+-- RLS เปิดอยู่ทุกตาราง: อนุญาตเฉพาะ role ของเว็บ (anon / authenticated ยังเข้าไม่ได้)
+DO $$
+DECLARE t text;
+BEGIN
+    FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'hitthecourt' LOOP
+        EXECUTE format('DROP POLICY IF EXISTS app_full_access ON hitthecourt.%I', t);
+        EXECUTE format('CREATE POLICY app_full_access ON hitthecourt.%I FOR ALL TO hitthecourt_app USING (true) WITH CHECK (true)', t);
+    END LOOP;
+END $$;

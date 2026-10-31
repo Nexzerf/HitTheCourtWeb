@@ -17,15 +17,18 @@
 โปรเจกต์นี้รันบน Vercel ได้ผ่าน runtime [`vercel-php`](https://github.com/vercel-community/php)
 ทุก Request จะเข้า `api/index.php` ซึ่งทำหน้าที่แทน `.htaccess` (ดู `vercel.json`)
 
-### 1. เตรียมฐานข้อมูล MySQL ที่เชื่อมต่อจากภายนอกได้
-MySQL ของ InfinityFree ไม่อนุญาตให้เชื่อมต่อจากภายนอก จึงต้องใช้ผู้ให้บริการอื่น เช่น TiDB Cloud, Aiven หรือ Railway
+### 1. ฐานข้อมูล: Supabase (PostgreSQL)
+ฐานข้อมูลอยู่ใน Supabase โปรเจกต์ **Project2** ใน schema `hitthecourt` (แยกจากตารางอื่นในโปรเจกต์)
+เว็บเชื่อมต่อด้วย role `hitthecourt_app` ที่เข้าถึงได้เฉพาะ schema นี้ และเปิด RLS ทุกตาราง
+(anon key / REST API ของ Supabase อ่านข้อมูลเว็บนี้ไม่ได้)
 
-รันไฟล์ SQL ตามลำดับนี้ (ตั้ง charset เป็น **utf8mb4** ตอน import ไม่อย่างนั้นภาษาไทยจะเพี้ยน
-เช่น `mysql --default-character-set=utf8mb4 ...`)
+ถ้าต้องสร้างใหม่ในโปรเจกต์อื่น:
+1. รัน `database/postgres/schema.sql` ใน SQL Editor
+2. แปลงข้อมูลจาก MySQL เดิม: `php database/postgres/export_mysql_data.php "mysql:host=...;dbname=...;charset=utf8mb4" user pass > data.sql` แล้วรัน `data.sql`
+3. ตั้งรหัสผ่าน: `ALTER ROLE hitthecourt_app WITH LOGIN PASSWORD '...';`
 
-1. `if0_41257064_hit_the_court.sql` (export ล่าสุดจาก InfinityFree)
-2. `database/vercel_tables.sql` — ตาราง `sessions` และ `uploaded_files`
-3. `database/migrations/001_spec_update.sql` — ข้อมูลกีฬา/อุปกรณ์ตามสเปก, ชื่อภาษาไทย, การจองหลายช่วงเวลา (รันครั้งเดียว)
+> ยังใช้ MySQL ได้เหมือนเดิม (ตั้ง `DB_DRIVER=mysql`) โดยรันไฟล์ SQL ตามลำดับ (import แบบ **utf8mb4**):
+> `if0_41257064_hit_the_court.sql` → `database/vercel_tables.sql` → `database/migrations/001_spec_update.sql`
 
 ### 2. สร้างโปรเจกต์บน Vercel
 Import repo นี้ที่ https://vercel.com/new (Framework Preset: **Other**, ไม่ต้องมี Build Command)
@@ -34,12 +37,14 @@ Import repo นี้ที่ https://vercel.com/new (Framework Preset: **Other
 
 | ชื่อ | ตัวอย่าง | หมายเหตุ |
 |---|---|---|
-| `DB_HOST` | `gateway01.ap-southeast-1.prod.aws.tidbcloud.com` | |
-| `DB_PORT` | `4000` | ค่าเริ่มต้น 3306 |
-| `DB_NAME` | `hit_the_court` | |
-| `DB_USER` | | |
-| `DB_PASS` | | |
-| `DB_SSL` | `1` | ฐานข้อมูลบนคลาวด์ส่วนใหญ่บังคับ SSL |
+| `DB_DRIVER` | `pgsql` | `pgsql` = Supabase, `mysql` = MySQL |
+| `DB_HOST` | `aws-0-ap-southeast-1.pooler.supabase.com` | Supabase → ปุ่ม **Connect** → **Session pooler** (Vercel ใช้ IPv6 ไม่ได้ จึงต้องใช้ pooler) |
+| `DB_PORT` | `5432` | Session pooler (ถ้าใช้ Transaction pooler = 6543 ก็ใช้ได้) |
+| `DB_NAME` | `postgres` | |
+| `DB_USER` | `hitthecourt_app.wgpumjrmowscxckqxshi` | role ของเว็บ + จุด + project ref |
+| `DB_PASS` | | รหัสผ่านของ `hitthecourt_app` |
+| `DB_SSL` | `1` | |
+| `DB_SCHEMA` | `hitthecourt` | ไม่บังคับ (ค่าเริ่มต้นของ pgsql) |
 | `PAYMENT_MODE` | `demo` | `demo` (ค่าเริ่มต้น) = แสดง QR พร้อมเพย์แต่ไม่ต้องจ่ายจริง กดยืนยันได้เลย / `thunder` = ตรวจสลิปจริง |
 | `THUNDER_API_KEY` | | ใช้เมื่อ `PAYMENT_MODE=thunder` เท่านั้น |
 | `SITE_URL` | `https://hitthecourt.vercel.app` | ไม่บังคับ ถ้าไม่ตั้งจะใช้โดเมนที่เข้ามาจริง |
